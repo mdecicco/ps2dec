@@ -1,5 +1,5 @@
 # ps2dec
-Decompiler for the MIPS R5900 architecture (Playstation 2) written in typescript
+Decompiler for the MIPS R5900 architecture (Playstation 2) written in TypeScript
 
 This project is currently under development but is intended to be used in conjunction with a modified PCSX2 that exposes a debugger API remotely.
 There is also a UI component for this which I'll upload once I refactor it to use this.
