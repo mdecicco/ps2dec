@@ -647,7 +647,7 @@ export class jalr extends Instruction {
         const target = decomp.getRegister(this.reads[0]);
         const returnAddress = Expr.Imm.u32(this.address + 8);
         decomp.setRegister(this.writes[0], returnAddress);
-        return new Expr.UnconditionalBranch(target);
+        return new Expr.IndirectCall(target);
     }
 }
 

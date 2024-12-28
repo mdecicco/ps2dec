@@ -3,20 +3,37 @@ import * as i from 'instructions';
 import { findBlockBoundaries } from './blocks';
 
 export class BasicBlock {
+    cfg: ControlFlowGraph;
     startAddress: number;
     endAddress: number;
+    startAddressHex: string;
+    endAddressHex: string;
     instructions: i.Instruction[];
     successors: BasicBlock[];
     predecessors: BasicBlock[];
-    cfg: ControlFlowGraph;
+    branchInstruction: i.Instruction | null;
 
     constructor(cfg: ControlFlowGraph, startAddress: number, endAddress: number, instructions: i.Instruction[]) {
         this.cfg = cfg;
         this.startAddress = startAddress;
         this.endAddress = endAddress;
+        this.startAddressHex = `0x${startAddress.toString(16).padStart(8, '0')}`;
+        this.endAddressHex = `0x${endAddress.toString(16).padStart(8, '0')}`;
         this.instructions = instructions;
         this.successors = [];
         this.predecessors = [];
+        this.branchInstruction = null;
+        this.findBranchInstruction();
+    }
+
+    private findBranchInstruction(): void {
+        for (let i = this.instructions.length - 1; i >= 0; i--) {
+            const instr = this.instructions[i];
+            if (instr.isBranch && !instr.isUnconditionalBranch) {
+                this.branchInstruction = instr;
+                return;
+            }
+        }
     }
 
     isLoopHeader(): boolean {

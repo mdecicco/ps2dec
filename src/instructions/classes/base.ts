@@ -27,6 +27,7 @@ export abstract class Instruction {
     private m_machineCode: number;
     private m_isBranch: boolean;
     private m_isLikelyBranch: boolean;
+    private m_isUnconditionalBranch: boolean;
     private m_isLoad: boolean;
     private m_isStore: boolean;
     private m_youreWelcome: string;
@@ -42,9 +43,22 @@ export abstract class Instruction {
         this.m_machineCode = info.machineCode;
         this.m_isBranch = info.isBranch || false;
         this.m_isLikelyBranch = info.isLikelyBranch || false;
+        this.m_isUnconditionalBranch = false;
         this.m_isLoad = info.isLoad || false;
         this.m_isStore = info.isStore || false;
         this.m_youreWelcome = `0x${info.address.toString(16).padStart(8, '0')}`;
+
+        if (this.m_isBranch) {
+            switch (this.m_code) {
+                case Op.Code.b:
+                case Op.Code.jal:
+                case Op.Code.jalr:
+                case Op.Code.j:
+                case Op.Code.jr:
+                    this.m_isUnconditionalBranch = true;
+                    break;
+            }
+        }
     }
 
     get code(): Op.Code {
@@ -85,6 +99,13 @@ export abstract class Instruction {
      */
     get isBranch(): boolean {
         return this.m_isBranch;
+    }
+
+    /**
+     * @returns `true` if the instruction is an unconditional branch
+     */
+    get isUnconditionalBranch(): boolean {
+        return this.m_isUnconditionalBranch;
     }
 
     /**

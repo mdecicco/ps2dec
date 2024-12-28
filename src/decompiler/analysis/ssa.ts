@@ -2,7 +2,7 @@ import * as Expr from 'decompiler/expr';
 import { Func, Method } from 'decompiler/typesys';
 import * as i from 'instructions';
 import { Reg } from 'types';
-import { compareLocations } from 'utils';
+import { compareLocations, formatVersionedLocation } from 'utils';
 import { BasicBlock, ControlFlowGraph } from './cfg';
 import { DefUseChains, VarDef, VarUse } from './definitions';
 import { DominatorInfo } from './dominators';
@@ -284,10 +284,24 @@ export class SSAForm {
         return this.m_defs.get(instr) || [];
     }
 
-    /**
-     * Get the initial definition of a register before a loop.
-     * This handles phi nodes at loop headers by finding the non-loop argument.
-     */
+    getAllUses(location: Location, version: number): SSAUse[] {
+        const uses: SSAUse[] = [];
+        const seenAddresses = new Set<number>();
+
+        for (const [instr, uses] of this.m_uses) {
+            for (const use of uses) {
+                if (seenAddresses.has(use.instruction.address)) continue;
+                seenAddresses.add(use.instruction.address);
+
+                if (compareLocations(use.location, location) && use.version === version) {
+                    uses.push(use);
+                }
+            }
+        }
+
+        return uses;
+    }
+
     getInitialDef(
         instr: i.Instruction,
         reg: Reg.Register
@@ -336,9 +350,6 @@ export class SSAForm {
         return null;
     }
 
-    /**
-     * Get the value associated with a specific SSA version of a register
-     */
     getValueForVersion(location: Location, version: number): Expr.Expression | null {
         if (debug)
             console.log(
@@ -393,9 +404,6 @@ export class SSAForm {
         return null;
     }
 
-    /**
-     * Check if a register defined at a given instruction is used later
-     */
     hasUses(instruction: i.Instruction, location: Location): boolean {
         const def = this.getDef(instruction, location);
         if (!def) return false;
@@ -423,19 +431,42 @@ export class SSAForm {
         return false;
     }
 
+    getVersionDef(location: Location, version: number): SSADef | SSADefWithValue {
+        for (const [instr, defs] of this.m_defs) {
+            const def = defs.find(d => {
+                if (d.version !== version || !compareLocations(d.location, location)) return false;
+                return true;
+            });
+            if (!def) continue;
+
+            const defsWithValues = this.m_defsWithValues.get(instr);
+            if (defsWithValues) {
+                const defWithValue = defsWithValues.find(d => compareLocations(d.location, location));
+                if (defWithValue) return defWithValue;
+            }
+
+            return def;
+        }
+
+        throw new Error(`No definition found for ${formatVersionedLocation({ value: location, version })}`);
+    }
+
     getMostRecentDef(atInstr: i.Instruction, location: Location): Expr.Expression | null {
         // Get the most recent definition of the location before this instruction
 
         // Search backwards through instructions to find last def
-        let currentBlock = this.m_cfg.getBlock(atInstr.address)!;
         const seen = new Set<BasicBlock>();
 
-        while (currentBlock) {
-            seen.add(currentBlock);
+        const worklist = [this.m_cfg.getBlock(atInstr.address)!];
+
+        while (worklist.length > 0) {
+            const block = worklist.pop();
+            if (!block) break;
+            seen.add(block);
 
             // Check instructions in reverse
-            for (let i = currentBlock.instructions.length - 1; i >= 0; i--) {
-                const instr = currentBlock.instructions[i];
+            for (let i = block.instructions.length - 1; i >= 0; i--) {
+                const instr = block.instructions[i];
                 if (instr.address >= atInstr.address) continue;
 
                 const def = this.getDef(instr, location);
@@ -445,9 +476,8 @@ export class SSAForm {
             }
 
             // Move to predecessors
-            const pred = currentBlock.predecessors.find(p => !seen.has(p));
-            if (!pred) break;
-            currentBlock = pred;
+            const preds = block.predecessors.filter(p => !seen.has(p));
+            worklist.push(...preds);
         }
 
         if (typeof location === 'number') {

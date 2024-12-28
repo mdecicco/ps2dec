@@ -18,11 +18,12 @@ export class ASTBuilder {
     /**
      * Create an expression node from an expression
      */
-    createExpression(instruction: Instruction, expressionGen: () => Expression): nodes.ExpressionNode {
+    createExpression(instruction: Instruction, omit: boolean, expressionGen: () => Expression): nodes.ExpressionNode {
         return {
             type: nodes.NodeType.Expression,
             parent: null,
             instruction,
+            omit,
             expressionGen
         };
     }

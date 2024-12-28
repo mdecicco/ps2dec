@@ -22,6 +22,7 @@ export interface ExpressionNode extends ASTNode {
     type: NodeType.Expression;
     expressionGen: () => Expression;
     instruction: Instruction;
+    omit: boolean;
 }
 
 export interface BlockNode extends ASTNode {

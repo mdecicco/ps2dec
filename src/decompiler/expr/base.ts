@@ -1,13 +1,20 @@
 import { Location, VersionedLocation } from 'decompiler/analysis/ssa';
+import { DecompVariable } from 'decompiler/analysis/vardb';
+import { CodeBuilder } from 'decompiler/codegen/codebuilder';
 import { Decompiler } from 'decompiler/decompiler';
 import { ArrayType, DataType, PointerType, PrimitiveType, StructureType, TypeSystem } from 'decompiler/typesys';
-import { Value } from 'decompiler/value';
 import { Reg } from 'types';
 
 type PropPathResult = {
     accessedType: DataType;
     remainingOffset: number;
     path: string;
+};
+
+type GenPropPathResult = {
+    accessedType: DataType;
+    remainingOffset: number;
+    generate: () => void;
 };
 
 type IndexInfo = {
@@ -172,6 +179,222 @@ function formatMem(base: Variable, offset: number, expectedType: DataType) {
     }
 
     return `*(${expectedType.name}*)((u8*)(&${result}${path.path}) + ${remainingOffset})`;
+}
+
+function genPropertyPath(
+    code: CodeBuilder,
+    type: DataType,
+    offset: number,
+    propAccessor: string = '.'
+): GenPropPathResult | null {
+    if (offset > type.size) return null;
+
+    if (type instanceof ArrayType) {
+        const elemType = type.elementType;
+        const index = Math.floor(offset / elemType.size);
+        const offsetFromIndex = offset - index * elemType.size;
+
+        const subPath = genPropertyPath(code, elemType, offsetFromIndex);
+        if (!subPath) {
+            return {
+                accessedType: elemType,
+                remainingOffset: offsetFromIndex,
+                generate: () => {
+                    code.punctuation('[');
+                    code.arrayAccess(type, `${index}`);
+                    code.punctuation(']');
+                }
+            };
+        }
+
+        const oldSubPathGen = subPath.generate;
+
+        subPath.generate = () => {
+            code.punctuation('[');
+            code.arrayAccess(type, `${index}`);
+            code.punctuation(']');
+            oldSubPathGen();
+        };
+
+        return subPath;
+    }
+
+    if (!(type instanceof StructureType)) return null;
+
+    const prop = type.propAtOffset(offset);
+    if (!prop) {
+        const undef = TypeSystem.get().getType('undefined');
+        return {
+            accessedType: undef,
+            remainingOffset: 0,
+            generate: () => {
+                code.punctuation(propAccessor);
+                code.propertyAccess(type, { offset, asType: undef });
+            }
+        };
+    }
+
+    const propType = TypeSystem.get().getType(prop.typeId);
+    const offsetFromProp = offset - prop.offset;
+
+    const subPath = genPropertyPath(code, propType, offsetFromProp);
+    if (!subPath) {
+        return {
+            accessedType: propType,
+            remainingOffset: offsetFromProp,
+            generate: () => {
+                code.punctuation(propAccessor);
+                code.propertyAccess(type, prop);
+            }
+        };
+    }
+
+    const oldSubPathGen = subPath.generate;
+
+    subPath.generate = () => {
+        code.punctuation(propAccessor);
+        code.propertyAccess(type, prop);
+        code.punctuation('.');
+        oldSubPathGen();
+    };
+
+    return subPath;
+}
+
+function generateMem(code: CodeBuilder, base: Variable, offset: number, expectedType: DataType) {
+    if (!(base.type instanceof PointerType)) {
+        code.punctuation('*(');
+        code.dataType(expectedType);
+        code.punctuation('*)(');
+        code.expression(base);
+
+        if (offset === 0) {
+            code.punctuation(')');
+            return;
+        }
+
+        code.whitespace(1);
+
+        if (offset < 0) {
+            code.punctuation('-');
+            code.whitespace(1);
+            Imm.i32(-offset).copyFrom(base).generate(code);
+            code.punctuation(')');
+            return;
+        }
+
+        code.punctuation('+');
+        code.whitespace(1);
+        Imm.i32(offset).copyFrom(base).generate(code);
+        code.punctuation(')');
+        return;
+    }
+
+    const objType = base.type.pointsTo;
+    const index = Math.floor(offset / objType.size);
+    const remainingOffset = offset - index * objType.size;
+    let didDeref = false;
+
+    const genResult = () => {
+        code.expression(base);
+        if (index > 0) {
+            code.punctuation('[');
+            Imm.i32(index).copyFrom(base).generate(code);
+            code.punctuation(']');
+        }
+    };
+
+    if (index > 0) {
+        didDeref = true;
+    }
+
+    const path = genPropertyPath(code, objType, remainingOffset, didDeref ? '.' : '->');
+    if (!path) {
+        if (remainingOffset === 0) {
+            if (expectedType.id === objType.id) {
+                if (didDeref) {
+                    genResult();
+                }
+
+                code.punctuation('*');
+                genResult();
+                return;
+            }
+
+            if (didDeref) {
+                code.punctuation('*(');
+                code.dataType(expectedType);
+                code.punctuation('*)&');
+                genResult();
+                return;
+            }
+
+            code.punctuation('*(');
+            code.dataType(expectedType);
+            code.punctuation('*)');
+            genResult();
+            return;
+        }
+
+        if (didDeref) {
+            code.punctuation('*(');
+            code.dataType(expectedType);
+            code.punctuation('*)((');
+            code.dataType(TypeSystem.get().getType('u8*'));
+            code.punctuation(')(&');
+            genResult();
+            code.punctuation(')');
+            code.whitespace(1);
+            code.punctuation('+');
+            code.whitespace(1);
+            Imm.i32(remainingOffset).copyFrom(base).generate(code);
+            code.punctuation(')');
+            return;
+        }
+
+        code.punctuation('*(');
+        code.dataType(expectedType);
+        code.punctuation('*)((');
+        code.dataType(TypeSystem.get().getType('u8*'));
+        code.punctuation(')(');
+        genResult();
+        code.punctuation(')');
+        code.whitespace(1);
+        code.punctuation('+');
+        code.whitespace(1);
+        Imm.i32(remainingOffset).copyFrom(base).generate(code);
+        code.punctuation(')');
+        return;
+    }
+
+    if (path.remainingOffset === 0) {
+        if (expectedType.id === path.accessedType.id) {
+            genResult();
+            path.generate();
+            return;
+        }
+
+        code.punctuation('*(');
+        code.dataType(expectedType);
+        code.punctuation('*)&');
+        genResult();
+        path.generate();
+        return;
+    }
+
+    code.punctuation('*(');
+    code.dataType(expectedType);
+    code.punctuation('*)((');
+    code.dataType(TypeSystem.get().getType('u8*'));
+    code.punctuation(')(&');
+    genResult();
+    path.generate();
+    code.punctuation(')');
+    code.whitespace(1);
+    code.punctuation('+');
+    code.whitespace(1);
+    Imm.i32(remainingOffset).copyFrom(base).generate(code);
+    code.punctuation(')');
 }
 
 function foldConstants(
@@ -409,6 +632,11 @@ export abstract class Expression {
         return this;
     }
 
+    generate(code: CodeBuilder): void {
+        code.setCurrentAddress(this.address);
+        this.generate_impl(code);
+    }
+
     toString(): string {
         // if (this.m_cachedString) return this.m_cachedString;
 
@@ -449,7 +677,7 @@ export abstract class Expression {
     }
 
     abstract clone(): Expression;
-
+    abstract generate_impl(code: CodeBuilder): void;
     protected abstract toString_impl(): string;
 }
 
@@ -470,6 +698,8 @@ export class Null extends Expression {
         return new Null().copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {}
+
     protected toString_impl(): string {
         return '';
     }
@@ -487,15 +717,19 @@ export class RawString extends Expression {
         return new RawString(this.m_str, this.type).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.plainText(this.m_str);
+    }
+
     protected toString_impl(): string {
         return this.m_str;
     }
 }
 
 export class Variable extends Expression {
-    private m_value: Value;
+    private m_value: DecompVariable;
 
-    constructor(value: Value) {
+    constructor(value: DecompVariable) {
         super();
         this.m_value = value;
         this.type = value.type;
@@ -507,6 +741,10 @@ export class Variable extends Expression {
 
     clone(): Expression {
         return new Variable(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.variable(this.m_value);
     }
 
     protected toString_impl(): string {
@@ -531,6 +769,10 @@ export class Imm extends Expression {
 
     clone(): Expression {
         return new Imm(this.m_value, this.type).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.literal(this.toString(), this.type);
     }
 
     protected toString_impl(): string {
@@ -716,7 +958,7 @@ export abstract class BinaryExpression extends Expression {
     }
 
     abstract clone(): Expression;
-
+    abstract generate_impl(code: CodeBuilder): void;
     protected abstract toString_impl(): string;
 }
 
@@ -772,6 +1014,14 @@ export class Add extends BinaryExpression {
 
     clone(): Expression {
         return new Add(this.m_lhs, this.m_rhs, this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('+');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -832,6 +1082,14 @@ export class Sub extends BinaryExpression {
         return new Sub(this.m_lhs, this.m_rhs, this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('-');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} - ${this.m_rhs}`;
     }
@@ -863,6 +1121,14 @@ export class Mul extends BinaryExpression {
 
     clone(): Expression {
         return new Mul(this.m_lhs, this.m_rhs, this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('*');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -898,6 +1164,14 @@ export class Div extends BinaryExpression {
         return new Div(this.m_lhs, this.m_rhs, this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('/');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} / ${this.m_rhs}`;
     }
@@ -931,6 +1205,14 @@ export class Mod extends BinaryExpression {
         return new Mod(this.m_lhs, this.m_rhs, this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('%');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} % ${this.m_rhs}`;
     }
@@ -962,6 +1244,11 @@ export class Negate extends Expression {
 
     clone(): Expression {
         return new Negate(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.punctuation('-');
+        code.expression(this.m_value);
     }
 
     protected toString_impl(): string {
@@ -999,6 +1286,11 @@ export class Not extends Expression implements LogicalExpr {
 
     clone(): Expression {
         return new Not(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.punctuation('!');
+        code.expression(this.m_value);
     }
 
     protected toString_impl(): string {
@@ -1042,6 +1334,14 @@ export class ShiftLeft extends BinaryExpression {
 
     clone(): Expression {
         return new ShiftLeft(this.m_lhs, this.m_rhs, this.m_bitWidth, this.m_preserveSignBit).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('<<');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1091,6 +1391,14 @@ export class ShiftRight extends BinaryExpression {
         return new ShiftRight(this.m_lhs, this.m_rhs, this.m_bitWidth, this.m_preserveSignBit).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('>>');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} >> ${this.m_rhs}`;
     }
@@ -1121,6 +1429,11 @@ export class Invert extends Expression {
 
     clone(): Expression {
         return new Invert(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.punctuation('~');
+        code.expression(this.m_value);
     }
 
     protected toString_impl(): string {
@@ -1155,6 +1468,14 @@ export class BitwiseAnd extends BinaryExpression {
         return new BitwiseAnd(this.m_lhs, this.m_rhs, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('&');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} & ${this.m_rhs}`;
     }
@@ -1187,6 +1508,14 @@ export class BitwiseOr extends BinaryExpression {
         return new BitwiseOr(this.m_lhs, this.m_rhs, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('|');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} | ${this.m_rhs}`;
     }
@@ -1217,6 +1546,14 @@ export class BitwiseXOr extends BinaryExpression {
 
     clone(): Expression {
         return new BitwiseXOr(this.m_lhs, this.m_rhs, this.m_bitWidth).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('^');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1254,6 +1591,14 @@ export class LogicalAnd extends BinaryExpression implements LogicalExpr {
         return new LogicalAnd(this.m_lhs, this.m_rhs, this.m_bitWidth).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('&&');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} && ${this.m_rhs}`;
     }
@@ -1287,6 +1632,14 @@ export class LogicalOr extends BinaryExpression implements LogicalExpr {
 
     clone(): Expression {
         return new LogicalOr(this.m_lhs, this.m_rhs, this.m_bitWidth).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('||');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1336,6 +1689,16 @@ export class IsEqual extends BinaryExpression implements LogicalExpr {
             }
         }
 
+        if (lhs instanceof Imm && rhs.type instanceof PointerType) {
+            if (lhs.value === 0n) {
+                return new Not(rhs).copyFrom(this);
+            }
+        } else if (rhs instanceof Imm && lhs.type instanceof PointerType) {
+            if (rhs.value === 0n) {
+                return new Not(lhs).copyFrom(this);
+            }
+        }
+
         if (!(lhs instanceof Imm) || !(rhs instanceof Imm)) {
             if (lhs === this.m_lhs && rhs === this.m_rhs) return this;
             return new IsEqual(lhs, rhs).copyFrom(this);
@@ -1346,6 +1709,14 @@ export class IsEqual extends BinaryExpression implements LogicalExpr {
 
     clone(): Expression {
         return new IsEqual(this.m_lhs, this.m_rhs).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('==');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1403,6 +1774,14 @@ export class IsNotEqual extends BinaryExpression implements LogicalExpr {
         return new IsNotEqual(this.m_lhs, this.m_rhs).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('!=');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} != ${this.m_rhs}`;
     }
@@ -1444,6 +1823,14 @@ export class IsGreater extends BinaryExpression implements LogicalExpr {
 
     clone(): Expression {
         return new IsGreater(this.m_lhs, this.m_rhs, this.m_isUnsigned).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('>');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1492,6 +1879,14 @@ export class IsGreaterOrEqual extends BinaryExpression implements LogicalExpr {
         return new IsGreaterOrEqual(this.m_lhs, this.m_rhs, this.m_isUnsigned).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('>=');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} >= ${this.m_rhs}`;
     }
@@ -1538,6 +1933,14 @@ export class IsLess extends BinaryExpression implements LogicalExpr {
         return new IsLess(this.m_lhs, this.m_rhs, this.m_isUnsigned).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('<');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
+    }
+
     protected toString_impl(): string {
         return `${this.m_lhs} < ${this.m_rhs}`;
     }
@@ -1579,6 +1982,14 @@ export class IsLessOrEqual extends BinaryExpression implements LogicalExpr {
 
     clone(): Expression {
         return new IsLessOrEqual(this.m_lhs, this.m_rhs, this.m_isUnsigned).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_lhs);
+        code.whitespace(1);
+        code.punctuation('<=');
+        code.whitespace(1);
+        code.expression(this.m_rhs);
     }
 
     protected toString_impl(): string {
@@ -1628,6 +2039,20 @@ export class Ternary extends Expression {
         return new Ternary(this.m_cond, this.m_truthyResult, this.m_falsyResult).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        if (this.m_cond instanceof BinaryExpression) this.m_cond.parenthesize();
+
+        code.expression(this.m_cond);
+        code.whitespace(1);
+        code.punctuation('?');
+        code.whitespace(1);
+        code.expression(this.m_truthyResult);
+        code.whitespace(1);
+        code.punctuation(':');
+        code.whitespace(1);
+        code.expression(this.m_falsyResult);
+    }
+
     protected toString_impl(): string {
         return `${this.m_cond} ? ${this.m_truthyResult} : ${this.m_falsyResult}`;
     }
@@ -1650,6 +2075,10 @@ export class ConditionalBranch extends Expression {
         return this.m_cond;
     }
 
+    set condition(cond: Expression) {
+        this.m_cond = cond;
+    }
+
     get target() {
         return this.m_branchAddress;
     }
@@ -1659,7 +2088,20 @@ export class ConditionalBranch extends Expression {
     }
 
     reduce(): Expression {
-        const cond = this.m_cond.reduce();
+        let cond = this.m_cond.reduce();
+
+        if (cond instanceof IsNotEqual) {
+            if (cond.lhs instanceof Imm && cond.rhs.type instanceof PointerType) {
+                if (cond.lhs.value === 0n) {
+                    cond = cond.rhs;
+                }
+            } else if (cond.rhs instanceof Imm && cond.lhs.type instanceof PointerType) {
+                if (cond.rhs.value === 0n) {
+                    cond = cond.lhs;
+                }
+            }
+        }
+
         if (cond === this.m_cond) return this;
         return new ConditionalBranch(cond, this.m_branchAddress, this.m_skipDelaySlotOnNoBranch).copyFrom(this);
     }
@@ -1670,6 +2112,11 @@ export class ConditionalBranch extends Expression {
 
     clone(): Expression {
         return new ConditionalBranch(this.m_cond, this.m_branchAddress, this.m_skipDelaySlotOnNoBranch).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        // conditional branches are specially handled by the flow analyzer / code generator
+        // don't generate any code here
     }
 
     protected toString_impl(): string {
@@ -1702,6 +2149,18 @@ export class UnconditionalBranch extends Expression {
 
     clone(): Expression {
         return new UnconditionalBranch(this.m_branchAddress).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        if (this.m_branchAddress instanceof Imm) {
+            // todo: check if target is a function
+            const target = this.m_branchAddress.value;
+            code.keyword('goto');
+            code.whitespace(1);
+            code.plainText(`LBL_${target.toString(16).padStart(8, '0')}`);
+        } else {
+            code.comment(`TODO: indirect unconditional branches\ngoto ${this.m_branchAddress}`);
+        }
     }
 
     protected toString_impl(): string {
@@ -1747,6 +2206,16 @@ export class ConditionalExpr extends Expression {
 
     get children(): Expression[] {
         return [this.m_cond, this.m_expr];
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.keyword('if');
+        code.whitespace(1);
+        code.punctuation('(');
+        code.expression(this.m_cond);
+        code.punctuation(')');
+        code.whitespace(1);
+        code.expression(this.m_expr);
     }
 
     protected toString_impl(): string {
@@ -1832,6 +2301,77 @@ export class Load extends Expression {
         return new Load(this.m_source, this.m_size, this.m_isUnassigned).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        const src = this.m_source.reduce();
+
+        if (src instanceof Add) {
+            if (src.lhs instanceof Variable && src.rhs instanceof Imm) {
+                generateMem(code, src.lhs, Number(src.rhs.value), this.type);
+                return;
+            } else if (src.lhs instanceof StackPointer && src.rhs instanceof Imm) {
+                const offset = Number(src.rhs.value);
+                const value = Decompiler.get().getStack(offset, this.address);
+                if (value.type === this.type) {
+                    code.expression(value);
+                    return;
+                }
+
+                code.punctuation('(');
+                code.dataType(this.type);
+                code.punctuation(')');
+                code.expression(value);
+                return;
+            } else {
+                const mem = extractMemoryReference(src);
+                if (mem && mem.offset instanceof BinaryExpression) {
+                    const indexInfo = getIndexInfo(mem.offset);
+                    if (indexInfo && indexInfo.elementSize === this.m_size && mem.base.type instanceof PointerType) {
+                        if (mem.base.type.pointsTo === this.type) {
+                            code.expression(mem.base);
+                            code.punctuation('[');
+                            code.expression(indexInfo.index);
+                            code.punctuation(']');
+                            return;
+                        }
+
+                        code.punctuation('(');
+                        code.dataType(this.type);
+                        code.punctuation(')');
+                        code.expression(mem.base);
+                        code.punctuation('[');
+                        code.expression(indexInfo.index);
+                        code.punctuation(']');
+                        return;
+                    }
+                }
+            }
+        } else if (src instanceof Variable) {
+            generateMem(code, src, 0, this.type);
+            return;
+        } else if (src instanceof StackPointer) {
+            const value = Decompiler.get().getStack(0, this.address);
+            if (value.type === this.type) {
+                code.expression(value);
+                return;
+            }
+            code.punctuation('(');
+            code.dataType(this.type);
+            code.punctuation(')');
+            code.expression(value);
+            return;
+        } else if (src.type instanceof PointerType && src.type.pointsTo === this.type) {
+            code.punctuation('*');
+            code.expression(src);
+            return;
+        }
+
+        code.punctuation('*(');
+        code.dataType(this.type);
+        code.punctuation('*)(');
+        code.expression(src);
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         const src = this.m_source.reduce();
 
@@ -1915,6 +2455,111 @@ export class Store extends Expression {
 
     clone(): Expression {
         return new Store(this.m_source, this.m_dest, this.m_size, this.m_isUnassigned).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        let lhs: string;
+        let src = this.m_source.reduce();
+
+        let storedType = src.type;
+        if (src.type.size !== this.m_size) {
+            if (src.type instanceof PrimitiveType && src.type.isFloatingPoint) {
+                storedType = TypeSystem.get().getType(`f${this.m_size * 8}`);
+            } else {
+                storedType = TypeSystem.get().getType(`${this.m_isUnassigned ? 'u' : 'i'}${this.m_size * 8}`);
+            }
+        }
+
+        const dest = this.m_dest.reduce();
+
+        let mem: { base: Expression; offset: Expression } | null = null;
+        let indexInfo: IndexInfo | null = null;
+
+        // prefer destination type over source type if it can be deduced
+        if (dest instanceof Add) {
+            mem = extractMemoryReference(dest);
+            if (mem) {
+                if (mem.base instanceof Variable && mem.offset instanceof Imm) {
+                    if (mem.base.type instanceof PointerType) {
+                        const offset = Number(mem.offset.value);
+                        const prop = getPropertyPath(mem.base.type.pointsTo, offset, '->');
+                        if (prop && prop.remainingOffset === 0 && prop.accessedType.size === this.m_size) {
+                            storedType = prop.accessedType;
+                        }
+                    }
+                } else if (mem.base instanceof StackPointer && mem.offset instanceof Imm) {
+                    const offset = Number(mem.offset.value);
+                    const stackType = mem.base.getTypeAtOffset(offset);
+                    if (stackType.size === this.m_size) {
+                        storedType = stackType;
+                    }
+                } else if (mem.offset instanceof BinaryExpression) {
+                    indexInfo = getIndexInfo(mem.offset);
+                    if (indexInfo) {
+                        if (indexInfo.elementSize === this.m_size && mem.base.type instanceof PointerType) {
+                            storedType = mem.base.type.pointsTo;
+                        }
+                    }
+                }
+            }
+        } else if (dest instanceof Variable) {
+            if (dest.type instanceof PointerType) {
+                const prop = getPropertyPath(dest.type.pointsTo, 0, '->');
+                if (prop && prop.accessedType.size === this.m_size) {
+                    storedType = prop.accessedType;
+                }
+            }
+        } else if (dest instanceof StackPointer) {
+            const stackType = dest.getTypeAtOffset(0);
+            if (stackType.size === this.m_size) {
+                storedType = stackType;
+            }
+        }
+
+        if (storedType !== src.type) {
+            if (src instanceof Imm && src.value === 0n && storedType instanceof PointerType) {
+                src = new RawString('nullptr');
+                src.type = storedType;
+            } else {
+                src = new PrimitiveCast(src, storedType).reduce();
+            }
+        }
+
+        if (mem) {
+            if (mem.base instanceof Variable && mem.offset instanceof Imm) {
+                const offset = Number(mem.offset.value);
+                generateMem(code, mem.base, offset, storedType);
+            } else if (mem.base instanceof StackPointer && mem.offset instanceof Imm) {
+                const offset = Number(mem.offset.value);
+                Decompiler.get().getStack(offset, this.address).generate(code);
+            } else if (indexInfo && mem.base.type instanceof PointerType && indexInfo.elementSize === this.m_size) {
+                code.expression(mem.base);
+                code.punctuation('[');
+                code.expression(indexInfo.index);
+                code.punctuation(']');
+            } else {
+                code.punctuation('*(');
+                code.dataType(storedType);
+                code.punctuation('*)(');
+                code.expression(mem.base);
+                code.punctuation(')');
+            }
+        } else if (dest instanceof Variable) {
+            generateMem(code, dest, 0, storedType);
+        } else if (dest instanceof StackPointer) {
+            Decompiler.get().getStack(0, this.address).generate(code);
+        } else {
+            code.punctuation('*(');
+            code.dataType(storedType);
+            code.punctuation('*)(');
+            code.expression(dest);
+            code.punctuation(')');
+        }
+
+        code.whitespace(1);
+        code.punctuation('=');
+        code.whitespace(1);
+        code.expression(src);
     }
 
     protected toString_impl(): string {
@@ -2014,6 +2659,11 @@ export class Break extends Expression {
         return new Break().copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('breakpoint');
+        code.punctuation('()');
+    }
+
     protected toString_impl(): string {
         return `breakpoint()`;
     }
@@ -2046,6 +2696,13 @@ export class Abs extends Expression {
 
     clone(): Expression {
         return new Abs(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('abs');
+        code.punctuation('(');
+        code.expression(this.m_value);
+        code.punctuation(')');
     }
 
     protected toString_impl(): string {
@@ -2103,6 +2760,19 @@ export class Min extends Expression {
         return Array.from(this.m_values);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('min');
+        code.punctuation('(');
+        for (let i = 0; i < this.m_values.length; i++) {
+            if (i > 0) {
+                code.punctuation(',');
+                code.whitespace(1);
+            }
+            code.expression(this.m_values[i]);
+        }
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         return `min(${this.m_values.map(v => v.toString()).join(', ')})`;
     }
@@ -2158,6 +2828,19 @@ export class Max extends Expression {
         return new Max(Array.from(this.m_values)).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('max');
+        code.punctuation('(');
+        for (let i = 0; i < this.m_values.length; i++) {
+            if (i > 0) {
+                code.punctuation(',');
+                code.whitespace(1);
+            }
+            code.expression(this.m_values[i]);
+        }
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         return `max(${this.m_values.map(v => v.toString()).join(', ')})`;
     }
@@ -2200,6 +2883,19 @@ export class Clamp extends Expression {
         return new Clamp(this.m_value, this.m_min, this.m_max).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('clamp');
+        code.punctuation('(');
+        code.expression(this.m_value);
+        code.punctuation(',');
+        code.whitespace(1);
+        code.expression(this.m_min);
+        code.punctuation(',');
+        code.whitespace(1);
+        code.expression(this.m_max);
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         return `clamp(${this.m_value}, ${this.m_min}, ${this.m_max})`;
     }
@@ -2235,6 +2931,13 @@ export class Sqrt extends Expression {
 
     clone(): Expression {
         return new Sqrt(this.m_value).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('sqrt');
+        code.punctuation('(');
+        code.expression(this.m_value);
+        code.punctuation(')');
     }
 
     protected toString_impl(): string {
@@ -2282,6 +2985,19 @@ export class GetBits extends Expression {
 
     clone(): Expression {
         return new GetBits(this.m_source, this.m_startBit, this.m_count).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('getBits');
+        code.punctuation('(');
+        code.expression(this.m_source);
+        code.punctuation(',');
+        code.whitespace(1);
+        code.expression(this.m_startBit);
+        code.punctuation(',');
+        code.whitespace(1);
+        code.expression(this.m_count);
+        code.punctuation(')');
     }
 
     protected toString_impl(): string {
@@ -2360,6 +3076,25 @@ export class ConcatBits extends Expression {
         return new ConcatBits(this.m_totalBitWidth, this.m_elementBitWidth, Array.from(this.m_elements)).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.miscReference('concatBits');
+        code.punctuation('(');
+        code.expression(this.m_totalBitWidth);
+        code.punctuation(',');
+        code.whitespace(1);
+        code.expression(this.m_elementBitWidth);
+        code.punctuation(',');
+        code.whitespace(1);
+        for (let i = 0; i < this.m_elements.length; i++) {
+            if (i > 0) {
+                code.punctuation(',');
+                code.whitespace(1);
+            }
+            code.expression(this.m_elements[i]);
+        }
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         const elems = this.m_elements.map(e => e.toString()).join(', ');
         return `concatBits(${this.m_totalBitWidth}, ${this.m_elementBitWidth}, ${elems})`;
@@ -2382,6 +3117,32 @@ export class Call extends Expression {
         return new Call(this.m_target).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        const func = this.target;
+        if (!func) {
+            code.miscReference(`FUN_${this.m_target.toString(16).padStart(8, '0')}`);
+            code.punctuation('()');
+            return;
+        }
+
+        const decomp = Decompiler.get();
+        code.func(func);
+        code.punctuation('(');
+        func.signature.arguments.map((a, idx) => {
+            if (idx > 0) {
+                code.punctuation(',');
+                code.whitespace(1);
+            }
+
+            if ('reg' in a.location) {
+                decomp.getRegister(a.location.reg).generate(code);
+            } else {
+                decomp.getStack(a.location.offset, this.address).generate(code);
+            }
+        });
+        code.punctuation(')');
+    }
+
     protected toString_impl(): string {
         const decomp = Decompiler.get();
         const func = this.target;
@@ -2394,10 +3155,36 @@ export class Call extends Expression {
                 return decomp.getRegister(a.location.reg);
             }
 
-            return new Add(decomp.getRegister(a.location.base), Imm.i16(a.location.offset), true);
+            return decomp.getStack(a.location.offset, this.address);
         });
 
         return `${func.name}(${args.map(a => a.toString()).join(', ')})`;
+    }
+}
+
+export class IndirectCall extends Expression {
+    private m_target: Expression;
+
+    constructor(target: Expression) {
+        super();
+        this.m_target = target;
+    }
+
+    get target() {
+        return this.m_target;
+    }
+
+    clone(): Expression {
+        return new IndirectCall(this.m_target).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        code.expression(this.m_target);
+        code.punctuation('()');
+    }
+
+    protected toString_impl(): string {
+        return `${this.m_target}()`;
     }
 }
 
@@ -2523,6 +3310,15 @@ export class PrimitiveCast extends Expression {
         return new PrimitiveCast(this.m_value, this.type).copyFrom(this);
     }
 
+    generate_impl(code: CodeBuilder): void {
+        code.punctuation('(');
+        code.dataType(this.type);
+        code.punctuation(')');
+
+        if (this.m_value instanceof BinaryExpression) this.m_value.parenthesize();
+        code.expression(this.m_value);
+    }
+
     protected toString_impl(): string {
         return `(${this.type.name})${this.m_value}`;
     }
@@ -2544,6 +3340,8 @@ export class StackPointer extends Expression {
     clone(): Expression {
         return new StackPointer().copyFrom(this);
     }
+
+    generate_impl(code: CodeBuilder): void {}
 
     protected toString_impl(): string {
         return `$sp`;
@@ -2576,6 +3374,28 @@ export class SSAVariable extends Expression {
     clone(): Expression {
         if (!this.location) throw new Error('Invalid SSAVariable');
         return new SSAVariable(this.location.value, this.location.version).copyFrom(this);
+    }
+
+    generate_impl(code: CodeBuilder): void {
+        if (!this.location) throw new Error('Invalid SSAVariable');
+
+        const decomp = Decompiler.get();
+        const instr = decomp.getInstruction(this.address);
+        if (instr) {
+            // Try to get the actual value for this version
+            const value = decomp.getValueForVersion(this.location.value, this.location.version);
+            if (value) {
+                value.copyFrom(this);
+                value.reduce().generate(code);
+                return;
+            }
+        }
+
+        if (typeof this.location.value === 'number') {
+            code.miscReference(`stack_${this.location.value.toString(16)}_${this.location.version}`);
+        } else {
+            code.miscReference(`${Reg.formatRegister(this.location.value).slice(1)}_${this.location.version}`);
+        }
     }
 
     protected toString_impl(): string {

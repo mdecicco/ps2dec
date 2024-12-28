@@ -65,6 +65,7 @@ export function test() {
     const sig = ts.getSignatureType(ts.getType('void'), [ts.getType('i32'), ts.getType('i32')], cls);
 
     const func = new Method(0, 0x00282848, sig);
+    func.name = 'Init';
     func.setArgName(0, 'linkCount');
 
     const fnNewSig = ts.getSignatureType(ts.getType('void*'), [ts.getType('u32')]);

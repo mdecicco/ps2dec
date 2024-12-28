@@ -3,6 +3,7 @@ import { DominatorInfo } from 'decompiler/analysis/dominators';
 import { SSAControlFlowAnalyzer } from 'decompiler/analysis/flow';
 import { Location, SSADefWithValue, SSAForm, VersionedLocation } from 'decompiler/analysis/ssa';
 import { DecompVariable, VariableDB } from 'decompiler/analysis/vardb';
+import { CodeBuilder } from 'decompiler/codegen/codebuilder';
 import * as Expr from 'decompiler/expr';
 import * as i from 'instructions';
 import { Op, Reg } from 'types';
@@ -354,11 +355,13 @@ export class Decompiler {
         });
         */
 
-        this.m_flowAnalyzer.printAST(ast);
+        const builder = new CodeBuilder(this.m_ssaForm);
+        builder.functionHeader(cache.func);
+        this.m_flowAnalyzer.generate(ast, builder);
+        builder.functionFooter();
+        console.log(builder.code);
 
-        this.m_variableDB.print();
-
-        console.log('done');
+        // this.m_variableDB.print();
     }
 
     promoteToVariable(location: Location, name?: string): DecompVariable {
