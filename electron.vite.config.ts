@@ -15,9 +15,11 @@ export default defineConfig({
         },
         resolve: {
             alias: {
+                ['apps/backend']: path.resolve(__dirname, 'src/apps/backend'),
                 decompiler: path.resolve(__dirname, 'src/packages/decompiler'),
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
-                utils: path.resolve(__dirname, 'src/packages/utils')
+                utils: path.resolve(__dirname, 'src/packages/utils'),
+                messages: path.resolve(__dirname, 'src/packages/messages')
             }
         }
     },
@@ -34,9 +36,11 @@ export default defineConfig({
         },
         resolve: {
             alias: {
+                ['apps/frontend']: path.resolve(__dirname, 'src/apps/frontend'),
                 decompiler: path.resolve(__dirname, 'src/packages/decompiler'),
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
-                utils: path.resolve(__dirname, 'src/packages/utils')
+                utils: path.resolve(__dirname, 'src/packages/utils'),
+                messages: path.resolve(__dirname, 'src/packages/messages')
             }
         }
     }

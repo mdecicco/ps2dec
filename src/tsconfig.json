@@ -10,7 +10,8 @@
         "paths": {
             "decompiler": ["./packages/decompiler"],
             "decoder": ["./packages/decoder"],
-            "utils": ["./packages/utils"]
+            "utils": ["./packages/utils"],
+            "messages": ["./packages/messages"]
         },
         "sourceMap": true
     },

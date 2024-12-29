@@ -3,6 +3,71 @@ const electron = require("electron");
 const require$$0$1 = require("path");
 const require$$0 = require("fs");
 const require$$3 = require("module");
+class Messager {
+  static {
+    this.initialized = false;
+  }
+  static {
+    this.handlers = /* @__PURE__ */ new Map();
+  }
+  static send(type, dataOrTarget, data) {
+    if (dataOrTarget instanceof electron.BrowserWindow) {
+      if (!data) {
+        throw new Error("Message data not specified for target");
+      }
+      const message = {
+        type,
+        payload: data
+      };
+      dataOrTarget.webContents.send("message", message);
+    } else {
+      const message = {
+        type,
+        payload: dataOrTarget
+      };
+      electron.BrowserWindow.getAllWindows().forEach((window2) => {
+        window2.webContents.send("message", message);
+      });
+    }
+  }
+  static on(message, handlerOrSource, handler) {
+    let handlers = this.handlers.get(message);
+    if (!handlers) {
+      handlers = [];
+      this.handlers.set(message, handlers);
+    }
+    if (handlerOrSource instanceof electron.BrowserWindow) {
+      if (!handler) {
+        throw new Error("Handler not specified for source");
+      }
+      handlers.push({ source: handlerOrSource, callback: handler });
+    } else {
+      handlers.push({ source: null, callback: handlerOrSource });
+    }
+    return () => {
+      const idx = handlers.findIndex((h) => h.callback === handler);
+      if (idx === -1) return;
+      handlers.splice(idx, 1);
+      if (handlers.length === 0) this.handlers.delete(message);
+    };
+  }
+  static initialize() {
+    if (this.initialized) return;
+    this.initialized = true;
+    electron.ipcMain.handle("message", (event, message) => {
+      const handlers = this.handlers.get(message.type);
+      if (!handlers) return;
+      for (const handler of handlers) {
+        try {
+          if (handler.source && handler.source.webContents.id !== event.sender.id) continue;
+          handler.callback(message);
+        } catch (error) {
+          console.error(`Error handling message ${message.type}`, error);
+        }
+      }
+    });
+  }
+}
 var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
 function getAugmentedNamespace(n) {
   if (n.__esModule) return n;
@@ -2003,9 +2068,13 @@ lib$1.register({
     utils: ["packages/utils"]
   }
 });
-const isDev = process.env.NODE_ENV === "development";
 electron.app.once("ready", () => {
+  Messager.on("ping", (data) => {
+    console.log("Received ping:", data);
+    Messager.send("pong", { message: "Pong!" });
+  });
   console.log("App is ready");
+  Messager.initialize();
   const win = new electron.BrowserWindow({
     width: 600,
     height: 400,
@@ -2014,7 +2083,7 @@ electron.app.once("ready", () => {
       contextIsolation: false
     }
   });
-  if (isDev) {
+  if (process.env.NODE_ENV === "development") {
     win.loadURL("http://localhost:5173").catch((e) => console.error(e));
     win.webContents.openDevTools();
   } else {

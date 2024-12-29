@@ -1,3 +1,4 @@
+import Messager from 'apps/backend/message';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { register } from 'tsconfig-paths';
@@ -13,7 +14,7 @@ register({
 });
 
 app.once('ready', () => {
-    console.log('App is ready');
+    Messager.initialize();
 
     const win = new BrowserWindow({
         width: 600,
