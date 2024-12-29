@@ -1,7 +1,5 @@
-import { decode } from 'decoder';
-import { Decompiler, DecompilerCache } from 'decompiler';
-import { Func, Method, TypeSystem } from 'decompiler/typesys';
-import * as Inst from 'instructions';
+import { decode, i } from 'decoder';
+import { Decompiler, DecompilerCache, Func, Method, TypeSystem } from 'decompiler';
 
 export function test() {
     // Code for function Creature::ragUnk0::Init @ 0x00282848
@@ -78,7 +76,7 @@ export function test() {
         try {
             return decode(instr.code, instr.address);
         } catch (err) {
-            return new Inst.nop(instr.address);
+            return new i.nop(instr.address);
         }
     });
 

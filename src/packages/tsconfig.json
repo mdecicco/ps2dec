@@ -1,0 +1,16 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "lib": ["es2020"],
+        "outDir": "../../build/packages",
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "composite": true,
+        "declaration": true,
+        "rootDir": ".",
+        "sourceMap": true
+    },
+    "include": ["./**/*"],
+    "references": []
+}
