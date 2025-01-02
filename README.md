@@ -36,3 +36,6 @@ There is also a UI component for this which I'll upload once I refactor it to us
     - UI for interacting with the PCSX2 debugger
 
 ...Believe it or not the hard part is mostly over
+
+## Progress
+![image](https://github.com/user-attachments/assets/554eee28-2640-4609-8b3f-7354f5937887)
