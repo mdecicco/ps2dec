@@ -11,6 +11,8 @@ export class Func {
     private m_retLocation: ValueLocation | null;
     protected m_signatureId: number;
     private m_name: string;
+    private m_isConstructor: boolean;
+    private m_isDestructor: boolean;
     private m_valueListeners: EventListener[];
 
     constructor(id: number, address: number, signature: FunctionSignatureType | MethodSignatureType) {
@@ -20,6 +22,8 @@ export class Func {
         this.m_name = `FUN_${address.toString(16).padStart(8, '0')}`;
         this.m_args = [];
         this.m_retLocation = signature.returnLocation;
+        this.m_isConstructor = false;
+        this.m_isDestructor = false;
         this.m_valueListeners = [];
 
         this.rebuildArgInfo();
@@ -39,6 +43,22 @@ export class Func {
 
     set name(name: string) {
         this.m_name = name;
+    }
+
+    get isConstructor() {
+        return this.m_isConstructor;
+    }
+
+    set isConstructor(isConstructor: boolean) {
+        this.m_isConstructor = isConstructor;
+    }
+
+    get isDestructor() {
+        return this.m_isDestructor;
+    }
+
+    set isDestructor(isDestructor: boolean) {
+        this.m_isDestructor = isDestructor;
     }
 
     get arguments() {

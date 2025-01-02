@@ -24,7 +24,7 @@ export class MemoryMap {
         this.m_memoryBegin = Infinity;
         this.m_memoryEnd = 0;
 
-        this.m_sections.forEach(section => {
+        this.m_sections.forEach((section, idx) => {
             if (section.virtualAddress === 0 || section.size === 0) return;
 
             if (section.virtualAddress < this.m_memoryBegin) this.m_memoryBegin = section.virtualAddress;

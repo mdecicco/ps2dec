@@ -51,6 +51,7 @@ export function test() {
     ];
 
     const ts = TypeSystem.get();
+    ts.initialize();
     const decompiler = Decompiler.get();
 
     const cls = ts.createStructure('ragUnk0');

@@ -9,8 +9,10 @@ export default defineConfig({
             sourcemap: true,
             rollupOptions: {
                 input: {
-                    index: path.join(__dirname, 'src/apps/backend/index.ts')
-                }
+                    index: path.join(__dirname, 'src/apps/backend/index.ts'),
+                    action_worker: path.join(__dirname, 'src/apps/action_worker/index.ts')
+                },
+                external: ['better-sqlite3']
             }
         },
         resolve: {
@@ -19,7 +21,8 @@ export default defineConfig({
                 decompiler: path.resolve(__dirname, 'src/packages/decompiler'),
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
                 utils: path.resolve(__dirname, 'src/packages/utils'),
-                messages: path.resolve(__dirname, 'src/packages/messages')
+                messages: path.resolve(__dirname, 'src/packages/messages'),
+                types: path.resolve(__dirname, 'src/packages/types')
             }
         }
     },
@@ -40,7 +43,8 @@ export default defineConfig({
                 decompiler: path.resolve(__dirname, 'src/packages/decompiler'),
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
                 utils: path.resolve(__dirname, 'src/packages/utils'),
-                messages: path.resolve(__dirname, 'src/packages/messages')
+                messages: path.resolve(__dirname, 'src/packages/messages'),
+                types: path.resolve(__dirname, 'src/packages/types')
             }
         }
     }

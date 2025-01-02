@@ -391,7 +391,8 @@ const InstructionSet: Match = {
         [0b011110, i.lq],
         [0b011111, i.sq],
         [0b110001, i.lwc1],
-        [0b111001, i.swc1]
+        [0b111001, i.swc1],
+        [0b001110, i.xori]
     ])
 };
 

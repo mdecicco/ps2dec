@@ -842,7 +842,13 @@ export class mtc1 extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
+        const src = decomp.getRegister(this.reads[0]);
+        if (src instanceof Expr.Imm) {
+            if (src.type.size === 4) src.type = 'f32';
+            else if (src.type.size === 8) src.type = 'f64';
+            else src.type = 'f32';
+        }
+        decomp.setRegister(this.writes[0], src);
         return new Expr.Null();
     }
 }

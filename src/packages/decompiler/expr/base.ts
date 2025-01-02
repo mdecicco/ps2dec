@@ -1,4 +1,5 @@
 import { Reg } from 'decoder';
+import { compareVersionedLocations } from 'utils';
 import { Location, VersionedLocation } from '../analysis/ssa';
 import { DecompVariable } from '../analysis/vardb';
 import { CodeBuilder } from '../codegen/codebuilder';
@@ -707,10 +708,13 @@ export class Null extends Expression {
 
 export class RawString extends Expression {
     private m_str: string;
-    constructor(str: string, type?: DataType | string | number) {
+    private m_genFunc: ((code: CodeBuilder) => void) | null;
+
+    constructor(str: string, type?: DataType | string | number | null, genFunc?: (code: CodeBuilder) => void) {
         super();
         this.m_str = str;
         this.type = type ? type : 'undefined';
+        this.m_genFunc = genFunc || null;
     }
 
     clone(): Expression {
@@ -718,7 +722,8 @@ export class RawString extends Expression {
     }
 
     generate_impl(code: CodeBuilder): void {
-        code.plainText(this.m_str);
+        if (this.m_genFunc) this.m_genFunc(code);
+        else code.plainText(this.m_str);
     }
 
     protected toString_impl(): string {
@@ -982,22 +987,26 @@ export class Add extends BinaryExpression {
         const rhsIsImm = rhs instanceof Imm;
         if (lhs instanceof Add && rhsIsImm) {
             if (lhs.m_lhs instanceof Imm) {
-                lhs.m_lhs = foldConstants(lhs.m_lhs, rhs, 'add');
-                return lhs;
+                const result = lhs.clone() as Add;
+                result.m_lhs = foldConstants(lhs.m_lhs, rhs, 'add');
+                return result;
             } else if (lhs.m_rhs instanceof Imm) {
-                lhs.m_rhs = foldConstants(lhs.m_rhs, rhs, 'add');
-                return lhs;
+                const result = lhs.clone() as Add;
+                result.m_rhs = foldConstants(lhs.m_rhs, rhs, 'add');
+                return result;
             }
         }
 
         const lhsIsImm = lhs instanceof Imm;
         if (rhs instanceof Add && lhsIsImm) {
             if (rhs.m_lhs instanceof Imm) {
-                rhs.m_lhs = foldConstants(rhs.m_lhs, lhs, 'add');
-                return rhs;
+                const result = rhs.clone() as Add;
+                result.m_lhs = foldConstants(rhs.m_lhs, lhs, 'add');
+                return result;
             } else if (rhs.m_rhs instanceof Imm) {
-                rhs.m_rhs = foldConstants(rhs.m_rhs, lhs, 'add');
-                return rhs;
+                const result = rhs.clone() as Add;
+                result.m_rhs = foldConstants(rhs.m_rhs, lhs, 'add');
+                return result;
             }
         }
 
@@ -1049,22 +1058,26 @@ export class Sub extends BinaryExpression {
         const rhsIsImm = rhs instanceof Imm;
         if (lhs instanceof Sub && rhsIsImm) {
             if (lhs.m_lhs instanceof Imm) {
-                lhs.m_lhs = foldConstants(lhs.m_lhs, rhs, 'sub');
-                return lhs;
+                const result = lhs.clone() as Sub;
+                result.m_lhs = foldConstants(lhs.m_lhs, rhs, 'sub');
+                return result;
             } else if (lhs.m_rhs instanceof Imm) {
-                lhs.m_rhs = foldConstants(lhs.m_rhs, rhs, 'sub');
-                return lhs;
+                const result = lhs.clone() as Sub;
+                result.m_rhs = foldConstants(lhs.m_rhs, rhs, 'sub');
+                return result;
             }
         }
 
         const lhsIsImm = lhs instanceof Imm;
         if (rhs instanceof Sub && lhsIsImm) {
             if (rhs.m_lhs instanceof Imm) {
-                rhs.m_lhs = foldConstants(rhs.m_lhs, lhs, 'sub');
-                return rhs;
+                const result = rhs.clone() as Sub;
+                result.m_lhs = foldConstants(rhs.m_lhs, lhs, 'sub');
+                return result;
             } else if (rhs.m_rhs instanceof Imm) {
-                rhs.m_rhs = foldConstants(rhs.m_rhs, lhs, 'sub');
-                return rhs;
+                const result = rhs.clone() as Sub;
+                result.m_rhs = foldConstants(rhs.m_rhs, lhs, 'sub');
+                return result;
             }
         }
 
@@ -2363,6 +2376,9 @@ export class Load extends Expression {
             code.punctuation('*');
             code.expression(src);
             return;
+        } else if (src instanceof Imm) {
+            code.miscReference(`DAT_${src.value.toString(16).padStart(8, '0')}`);
+            return;
         }
 
         code.punctuation('*(');
@@ -2406,6 +2422,8 @@ export class Load extends Expression {
             if (src.type.pointsTo === this.type) {
                 return `*${src}`;
             }
+        } else if (src instanceof Imm) {
+            return `*(${this.type.name}*)(DAT_${src.value.toString(16).padStart(8, '0')})`;
         }
 
         return `*(${this.type.name}*)(${src})`;
@@ -2542,12 +2560,36 @@ export class Store extends Expression {
                 code.dataType(storedType);
                 code.punctuation('*)(');
                 code.expression(mem.base);
+                if (mem.offset instanceof Imm) {
+                    if (mem.offset.value > 0n) {
+                        code.whitespace(1);
+                        code.punctuation('+');
+                        code.whitespace(1);
+                        mem.offset.generate(code);
+                    } else if (mem.offset.value < 0n) {
+                        code.whitespace(1);
+                        code.punctuation('-');
+                        code.whitespace(1);
+                        foldConstants(mem.offset, mem.offset, 'neg').generate(code);
+                    }
+                } else {
+                    code.whitespace(1);
+                    code.punctuation('+');
+                    code.whitespace(1);
+                    mem.offset.generate(code);
+                }
                 code.punctuation(')');
             }
         } else if (dest instanceof Variable) {
             generateMem(code, dest, 0, storedType);
         } else if (dest instanceof StackPointer) {
             Decompiler.get().getStack(0, this.address).generate(code);
+        } else if (dest instanceof Imm) {
+            code.punctuation('*(');
+            code.dataType(storedType);
+            code.punctuation('*)(');
+            code.miscReference(`DAT_${dest.value.toString(16).padStart(8, '0')}`);
+            code.punctuation(')');
         } else {
             code.punctuation('*(');
             code.dataType(storedType);
@@ -2639,11 +2681,25 @@ export class Store extends Expression {
                 lhs = `${Decompiler.get().getStack(offset, this.address)}`;
             } else if (indexInfo && mem.base.type instanceof PointerType && indexInfo.elementSize === this.m_size) {
                 lhs = `${mem.base}[${indexInfo.index}]`;
-            } else lhs = `*(${storedType.name}*)(${mem.base})`;
+            } else {
+                if (mem.offset instanceof Imm) {
+                    if (mem.offset.value === 0n) {
+                        lhs = `*(${storedType.name}*)(${mem.base})`;
+                    } else if (mem.offset.value > 0n) {
+                        lhs = `*(${storedType.name}*)(${mem.base} + ${mem.offset})`;
+                    } else {
+                        lhs = `*(${storedType.name}*)(${mem.base} - ${foldConstants(mem.offset, mem.offset, 'neg')})`;
+                    }
+                } else {
+                    lhs = `*(${storedType.name}*)(${mem.base} + ${mem.offset})`;
+                }
+            }
         } else if (dest instanceof Variable) {
             lhs = formatMem(dest, 0, storedType);
         } else if (dest instanceof StackPointer) {
             lhs = `${Decompiler.get().getStack(0, this.address)}`;
+        } else if (dest instanceof Imm) {
+            lhs = `*(${storedType.name}*)(DAT_${dest.value.toString(16).padStart(8, '0')})`;
         } else lhs = `*(${storedType.name}*)(${dest})`;
 
         return `${lhs} = ${src}`;
@@ -3364,8 +3420,15 @@ export class SSAVariable extends Expression {
         const decomp = Decompiler.get();
         const value = decomp.getValueForVersion(this.location.value, this.location.version);
         if (value) {
-            value.copyFrom(this);
-            return value.reduce();
+            if (value instanceof SSAVariable && value.location) {
+                if (compareVersionedLocations(this.location, value.location)) {
+                    return value;
+                }
+            } else if (value === this) {
+                return value;
+            }
+
+            return value.reduce().copyFrom(this);
         }
 
         return this;
@@ -3401,6 +3464,7 @@ export class SSAVariable extends Expression {
     protected toString_impl(): string {
         if (!this.location) return `Invalid SSAVariable`;
 
+        /*
         const decomp = Decompiler.get();
         const instr = decomp.getInstruction(this.address);
         if (instr) {
@@ -3411,6 +3475,7 @@ export class SSAVariable extends Expression {
                 return value.reduce().toString();
             }
         }
+        */
 
         if (typeof this.location.value === 'number') {
             return `stack_${this.location.value.toString(16)}_${this.location.version}`;

@@ -263,6 +263,23 @@ export class StructureType extends DataType {
 
         return prop || null;
     }
+
+    static rehydrate(
+        id: number,
+        properties: TypeProperty[],
+        methods: Method[],
+        baseTypes: TypeInheritance[],
+        vtable: VTable | null,
+        name: string
+    ) {
+        const tp = new StructureType(id);
+        tp.name = name;
+        tp.m_properties = properties;
+        tp.m_methods = methods;
+        tp.m_baseTypes = baseTypes;
+        tp.m_vtable = vtable;
+        return tp;
+    }
 }
 
 export class PointerType extends DataType {
@@ -282,6 +299,14 @@ export class PointerType extends DataType {
 
     static generateName(pointsTo: DataType) {
         return `${pointsTo.name}*`;
+    }
+
+    static rehydrate(id: number, pointsToId: number, name: string) {
+        const voidT = TypeSystem.get().getType('void');
+        const tp = new PointerType(id, voidT);
+        tp.name = name;
+        tp.m_pointedTypeId = pointsToId;
+        return tp;
     }
 }
 
@@ -310,12 +335,21 @@ export class ArrayType extends DataType {
     static generateName(elementType: DataType, length: number) {
         return `${elementType.name}[${length}]`;
     }
+
+    static rehydrate(id: number, elementTypeId: number, length: number, size: number, name: string) {
+        const voidT = TypeSystem.get().getType('void');
+        const tp = new ArrayType(id, voidT, length);
+        tp.name = name;
+        tp.m_elementTypeId = elementTypeId;
+        tp.setSize(size);
+        return tp;
+    }
 }
 
 export class FunctionSignatureType extends DataType {
-    private m_returnTypeId: number;
+    protected m_returnTypeId: number;
     protected m_callConf!: CallConfig;
-    private m_arguments!: ArgumentInfo[];
+    protected m_arguments!: ArgumentInfo[];
 
     protected initCallConf(returnType: DataType, argumentTypes: DataType[], thisType?: DataType) {
         this.m_callConf = getCallConfig(CallConv.CDecl, returnType, argumentTypes, thisType);
@@ -355,6 +389,10 @@ export class FunctionSignatureType extends DataType {
         return this.m_callConf.returnValueLocation;
     }
 
+    get callConfig() {
+        return this.m_callConf;
+    }
+
     getArgType(idx: number) {
         if (idx >= this.m_arguments.length) {
             throw new Error(`Argument index ${idx} out of range`);
@@ -369,6 +407,41 @@ export class FunctionSignatureType extends DataType {
         }
 
         return `${returnType.name}(${argumentTypes.map(t => t.name).join(',')})`;
+    }
+
+    static rehydrate(
+        id: number,
+        returnTypeId: number,
+        thisTypeId: number | null,
+        argumentTypeIds: number[],
+        conf: CallConfig,
+        name: string
+    ) {
+        const ts = TypeSystem.get();
+        const voidT = ts.getType('void');
+
+        if (thisTypeId) {
+            const tp = new MethodSignatureType(id, voidT, voidT, []);
+            tp.name = name;
+            tp.m_returnTypeId = returnTypeId;
+            (tp as any).m_thisTypeId = thisTypeId;
+            tp.m_callConf = conf;
+            tp.m_arguments = argumentTypeIds.map(id => ({
+                location: conf.argumentLocations[0],
+                typeId: id
+            }));
+            return tp;
+        }
+
+        const tp = new FunctionSignatureType(id, voidT, []);
+        tp.name = name;
+        tp.m_returnTypeId = returnTypeId;
+        tp.m_callConf = conf;
+        tp.m_arguments = argumentTypeIds.map(id => ({
+            location: conf.argumentLocations[0],
+            typeId: id
+        }));
+        return tp;
     }
 }
 
@@ -428,6 +501,16 @@ export class EnumType extends DataType {
     get underlyingType() {
         return TypeSystem.get().getType(this.m_underlyingTypeId) as PrimitiveType;
     }
+
+    static rehydrate(id: number, underlyingTypeId: number, fields: Map<string, number>, name: string) {
+        const ts = TypeSystem.get();
+        const u8 = ts.getType('u8') as PrimitiveType;
+        const tp = new EnumType(id, u8);
+        tp.name = name;
+        tp.m_underlyingTypeId = underlyingTypeId;
+        tp.m_fields = fields;
+        return tp;
+    }
 }
 
 export class BitfieldType extends DataType {
@@ -437,7 +520,7 @@ export class BitfieldType extends DataType {
     constructor(id: number, underlyingType: PrimitiveType) {
         super(id);
 
-        if (underlyingType.isFloatingPoint) {
+        if (underlyingType.isFloatingPoint || underlyingType.size === 0) {
             throw new Error(`Bitfield underlying type must be integral, '${underlyingType.name}' provided`);
         }
 
@@ -453,5 +536,15 @@ export class BitfieldType extends DataType {
 
     get underlyingType() {
         return TypeSystem.get().getType(this.m_underlyingTypeId) as PrimitiveType;
+    }
+
+    static rehydrate(id: number, underlyingTypeId: number, fields: Map<string, number>, name: string) {
+        const ts = TypeSystem.get();
+        const u8 = ts.getType('u8') as PrimitiveType;
+        const tp = new BitfieldType(id, u8);
+        tp.name = name;
+        tp.m_underlyingTypeId = underlyingTypeId;
+        tp.m_fields = fields;
+        return tp;
     }
 }

@@ -1,7 +1,7 @@
 import { Location, SSAForm } from '../analysis/ssa';
 import * as Expr from '../expr/base';
 import { DataType, Func, Method, PointerType, TypeProperty } from '../typesys';
-import { Value } from '../value';
+import { SerializedValue, Value } from '../value';
 
 export type SourceLocation = {
     startOffset: number;
@@ -35,14 +35,31 @@ export type VariableAnnotation = {
     variable: Value;
 };
 
+export type SerializedVariableAnnotation = {
+    type: SourceAnnotationType.Variable;
+    variable: SerializedValue;
+};
+
 export type DataTypeAnnotation = {
     type: SourceAnnotationType.DataType;
     dataType: DataType;
 };
 
+export type SerializedDataTypeAnnotation = {
+    type: SourceAnnotationType.DataType;
+    dataTypeId: number;
+    dataTypeName: string;
+};
+
 export type FunctionAnnotation = {
     type: SourceAnnotationType.Function;
     func: Func | Method;
+};
+
+export type SerializedFunctionAnnotation = {
+    type: SourceAnnotationType.Function;
+    funcId: number;
+    funcName: string;
 };
 
 export type KeywordAnnotation = {
@@ -87,6 +104,27 @@ export type SourceAnnotation =
     | CommentAnnotation
     | WhitespaceAnnotation
     | PlainTextAnnotation;
+
+export type SerializedSourceAnnotation =
+    | SerializedVariableAnnotation
+    | SerializedDataTypeAnnotation
+    | SerializedFunctionAnnotation
+    | KeywordAnnotation
+    | LiteralAnnotation
+    | PunctuationAnnotation
+    | CommentAnnotation
+    | WhitespaceAnnotation
+    | PlainTextAnnotation;
+
+export type SerializedDecompilation = {
+    code: string;
+    addressLocationMap: [number, SourceLocation[]][];
+    locationAddressMap: [SourceLocation, number[]][];
+    variableStorageMap: [SerializedValue, VariableStorage[]][];
+    lineAnnotationMap: [number, SerializedSourceAnnotation[]][];
+    lineRanges: [number, SourceLocation][];
+    annotations: SerializedSourceAnnotation[];
+};
 
 export type CodeBuilderOptions = {
     tabWidth: number;
@@ -342,7 +380,46 @@ export class CodeBuilder {
         this.punctuation('}');
     }
 
+    serialize(): SerializedDecompilation {
+        const serializeAnnotation = (a: SourceAnnotation) => {
+            switch (a.type) {
+                case SourceAnnotationType.Variable:
+                    return { ...a, variable: a.variable.serialize() };
+                case SourceAnnotationType.DataType:
+                    return { ...a, dataTypeId: a.dataType.id, dataTypeName: a.dataType.name };
+                case SourceAnnotationType.Function:
+                    return { ...a, funcId: a.func.id, funcName: a.func.name };
+                default:
+                    return a;
+            }
+        };
+        return {
+            code: this.m_code,
+            addressLocationMap: Array.from(this.m_addressLocationMap.entries()),
+            locationAddressMap: Array.from(this.m_locationAddressMap.entries()),
+            variableStorageMap: Array.from(this.m_variableStorageMap.entries()).map(([value, storage]) => [
+                value.serialize(),
+                storage
+            ]),
+            lineAnnotationMap: Array.from(this.m_lineAnnotationMap.entries()).map(([line, annotations]) => [
+                line,
+                annotations.map(serializeAnnotation)
+            ]),
+            lineRanges: Array.from(this.m_lineRanges.entries()),
+            annotations: this.m_annotations.map(serializeAnnotation)
+        };
+    }
+
     private add(annotation: SourceAnnotation) {
+        if (this.m_currentColumn === 1 && this.m_indent > 0 && annotation.type !== SourceAnnotationType.Whitespace) {
+            this.m_currentColumn = this.m_options.tabWidth * this.m_indent + 1;
+            this.add({
+                type: SourceAnnotationType.Whitespace,
+                length: this.m_options.tabWidth * this.m_indent,
+                isNewLine: false
+            });
+        }
+
         this.m_annotations.push(annotation);
         const lineAnnotations = this.m_lineAnnotationMap.get(this.m_currentLine);
         if (lineAnnotations) {
@@ -404,10 +481,6 @@ export class CodeBuilder {
 
     private renderAnnotation(annotation: SourceAnnotation) {
         let str = '';
-        if (this.m_currentColumn === 1) {
-            str += ' '.repeat(this.m_options.tabWidth * this.m_indent);
-        }
-
         switch (annotation.type) {
             case SourceAnnotationType.Variable:
                 str += annotation.variable.name!;
@@ -426,7 +499,7 @@ export class CodeBuilder {
             case SourceAnnotationType.Comment:
                 const lines = annotation.content.split('\n');
                 if (lines.length === 1) {
-                    str += `// ${annotation.content}`;
+                    str += `/* ${annotation.content} */`;
                 } else {
                     str += `/*\n${lines.map(l => ` * ${l}\n`).join('')}*/`;
                 }
@@ -469,5 +542,78 @@ export class CodeBuilder {
                 });
             });
         }
+    }
+}
+
+export class Decompilation {
+    private m_code: string;
+    private m_addressLocationMap: Map<number, SourceLocation[]>;
+    private m_locationAddressMap: Map<SourceLocation, number[]>;
+    private m_variableStorageMap: Map<Value, VariableStorage[]>;
+    private m_lineAnnotationMap: Map<number, SerializedSourceAnnotation[]>;
+    private m_lineRanges: Map<number, SourceLocation>;
+    private m_annotations: SerializedSourceAnnotation[];
+
+    constructor(fromSerialized: SerializedDecompilation /* , funcDb: IFunctionDatabase */) {
+        this.m_code = fromSerialized.code;
+        this.m_addressLocationMap = new Map(fromSerialized.addressLocationMap);
+        this.m_locationAddressMap = new Map(fromSerialized.locationAddressMap);
+        this.m_variableStorageMap = new Map(
+            fromSerialized.variableStorageMap.map(([value, storage]) => [Value.deserialize(value), storage])
+        );
+        this.m_lineAnnotationMap = new Map(fromSerialized.lineAnnotationMap);
+        this.m_lineRanges = new Map(fromSerialized.lineRanges);
+        this.m_annotations = fromSerialized.annotations;
+        /*
+        this.m_annotations = fromSerialized.annotations.map(a => {
+            switch (a.type) {
+                case SourceAnnotationType.Variable:
+                    return { type: SourceAnnotationType.Variable, variable: Value.deserialize(a.variable) };
+                case SourceAnnotationType.DataType:
+                    return {
+                        type: SourceAnnotationType.DataType,
+                        dataType: TypeSystem.get().getType(a.dataTypeId)
+                    };
+                case SourceAnnotationType.Function:
+                    const func = funcDb.findFunctionById(a.funcId);
+                    if (!func) throw new Error(`Function with id ${a.funcId} not found`);
+
+                    return {
+                        type: SourceAnnotationType.Function,
+                        func
+                    };
+                default:
+                    return a;
+            }
+        });
+        */
+    }
+
+    get code() {
+        return this.m_code;
+    }
+
+    get annotations() {
+        return this.m_annotations;
+    }
+
+    get lineCount() {
+        return this.m_lineRanges.size;
+    }
+
+    getLineAnnotations(line: number) {
+        return this.m_lineAnnotationMap.get(line) || [];
+    }
+
+    getAddressesForLocation(location: SourceLocation) {
+        const addresses: number[] = [];
+
+        for (const [addr, locs] of this.m_addressLocationMap) {
+            if (locs.some(l => sourceLocationIntersects(l, location))) {
+                addresses.push(addr);
+            }
+        }
+
+        return addresses;
     }
 }

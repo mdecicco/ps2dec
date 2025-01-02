@@ -20,6 +20,13 @@ type ValueEvents = {
     'ssa-location-added': (location: Location, version: number) => void;
 };
 
+export type SerializedValue = {
+    typeId: number;
+    name: string | null;
+    ssaLocations: Location[];
+    ssaVersions: [Location, number[]][];
+};
+
 export class Value extends EventProducer<ValueEvents> {
     private m_typeId: number;
     private m_name: string | null;
@@ -108,5 +115,24 @@ export class Value extends EventProducer<ValueEvents> {
 
     private validateType(type: DataType) {
         // todo
+    }
+
+    serialize(): SerializedValue {
+        return {
+            typeId: this.m_typeId,
+            name: this.m_name,
+            ssaLocations: this.m_ssaLocations.values,
+            ssaVersions: this.m_ssaVersions.entries
+        };
+    }
+
+    static deserialize(data: SerializedValue): Value {
+        const value = new Value(data.typeId, data.name);
+        value.m_ssaLocations = new LocationSet(data.ssaLocations);
+        value.m_ssaVersions = new LocationMap();
+        for (const [location, versions] of data.ssaVersions) {
+            value.m_ssaVersions.set(location, versions);
+        }
+        return value;
     }
 }

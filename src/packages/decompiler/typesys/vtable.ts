@@ -3,12 +3,14 @@ import { TypeSystem } from './typesys';
 export class VTableMethod {
     private m_vtableId: number;
     private m_offset: number;
+    private m_dataOffset: number;
     private m_name: string;
 
-    constructor(vtableId: number, offset: number) {
+    constructor(vtableId: number, offset: number, dataOffset: number, name?: string) {
         this.m_vtableId = vtableId;
         this.m_offset = offset;
-        this.m_name = `VMETHOD_${offset.toString(16)}`;
+        this.m_dataOffset = dataOffset;
+        this.m_name = name || `VMETHOD_${offset.toString(16)}`;
     }
 
     get vtable() {
@@ -17,6 +19,10 @@ export class VTableMethod {
 
     get offset() {
         return this.m_offset;
+    }
+
+    get dataOffset() {
+        return this.m_dataOffset;
     }
 
     get name() {
@@ -56,5 +62,9 @@ export class VTable {
 
     get ownMethods() {
         return this.m_methods;
+    }
+
+    addMethod(method: VTableMethod) {
+        this.m_methods.push(method);
     }
 }

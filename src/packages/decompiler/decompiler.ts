@@ -37,6 +37,7 @@ export class DecompilerCache {
 
 export interface IFunctionDatabase {
     findFunctionByAddress: (address: number) => Func | Method | null;
+    findFunctionById: (id: number) => Func | Method | null;
 }
 
 export class Decompiler {
@@ -125,6 +126,7 @@ export class Decompiler {
 
     private reset(instructions: i.Instruction[], func: Func | Method): void {
         this.m_didSetRegister = false;
+        this.m_defsLocked = false;
         this.m_currentInstruction = instructions[0];
         this.m_instructionMap.clear();
         this.m_ignoredAddresses.clear();
@@ -353,6 +355,9 @@ export class Decompiler {
             return expr;
         }
 
+        const val = this.m_ssaForm.getMostRecentDef(instr, reg);
+        if (val) return val;
+
         // Check if there is a use in the current instruction
         const use = this.m_ssaForm.getUse(instr, reg);
         if (use) {
@@ -360,9 +365,6 @@ export class Decompiler {
             expr.address = instr.address;
             return expr;
         }
-
-        const val = this.m_ssaForm.getMostRecentDef(instr, reg);
-        if (val) return val;
 
         const expr = new Expr.RawString(`in_${Reg.formatRegister(reg).slice(1)}`);
         expr.address = instr.address;

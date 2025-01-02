@@ -1,9 +1,11 @@
 import { Reg } from 'decoder';
 import { Location, VersionedLocation } from 'decompiler';
 
+export * from './elf';
 export * from './event';
 export * from './location_map';
 export * from './location_set';
+export * from './memory';
 
 export function compareLocations(a: Location, b: Location): boolean {
     if (typeof a === 'number') {

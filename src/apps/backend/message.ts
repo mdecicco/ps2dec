@@ -3,32 +3,39 @@ import {
     ClientMessage,
     ClientMessagePayloads,
     ClientMessageType,
+    InvocationMap,
     MainMessage,
     MainMessagePayloads,
     MainMessageType
 } from 'messages';
+import { isMainThread } from 'worker_threads';
 
-type MessageHandler<Type extends MainMessageType> = {
+type MessageHandler = {
     source: BrowserWindow | null;
-    callback: (message: MainMessagePayloads[Type]) => void;
+    callback: (...args: any[]) => void;
 };
 
 export default class Messager {
     private static initialized: boolean = false;
-    private static handlers: Map<MainMessageType, MessageHandler<any>[]> = new Map();
+    private static handlers: Map<MainMessageType, MessageHandler[]> = new Map();
 
     static send<Type extends ClientMessageType>(
         type: Type,
         target: BrowserWindow,
-        message: ClientMessagePayloads[Type]
+        ...args: ClientMessagePayloads[Type] extends never ? [] : [message: ClientMessagePayloads[Type]]
     ): void;
-    static send<Type extends ClientMessageType>(type: Type, message: ClientMessagePayloads[Type]): void;
     static send<Type extends ClientMessageType>(
         type: Type,
-        dataOrTarget: ClientMessagePayloads[Type] | BrowserWindow,
+        ...args: ClientMessagePayloads[Type] extends never ? [] : [message: ClientMessagePayloads[Type]]
+    ): void;
+    static send<Type extends ClientMessageType>(
+        type: Type,
+        dataOrTarget?: ClientMessagePayloads[Type] | BrowserWindow,
         data?: ClientMessagePayloads[Type]
     ): void {
-        if (dataOrTarget instanceof BrowserWindow) {
+        if (!isMainThread) return;
+
+        if (dataOrTarget && dataOrTarget instanceof BrowserWindow) {
             if (!data) {
                 throw new Error('Message data not specified for target');
             }
@@ -38,10 +45,8 @@ export default class Messager {
             };
             dataOrTarget.webContents.send('message', message);
         } else {
-            const message: ClientMessage<Type> = {
-                type,
-                payload: dataOrTarget
-            };
+            const message: Partial<ClientMessage<Type>> = { type };
+            if (dataOrTarget) message.payload = dataOrTarget;
             BrowserWindow.getAllWindows().forEach(window => {
                 window.webContents.send('message', message);
             });
@@ -51,34 +56,58 @@ export default class Messager {
     static on<Type extends MainMessageType>(
         message: Type,
         from: BrowserWindow,
-        handler: (data: MainMessagePayloads[Type]) => void
+        handler: (
+            ...args: MainMessagePayloads[Type] extends never
+                ? [sender: BrowserWindow]
+                : [message: MainMessagePayloads[Type], sender: BrowserWindow]
+        ) => void
     ): () => void;
     static on<Type extends MainMessageType>(
         message: Type,
-        handler: (data: MainMessagePayloads[Type]) => void
+        handler: (
+            ...args: MainMessagePayloads[Type] extends never
+                ? [sender: BrowserWindow]
+                : [message: MainMessagePayloads[Type], sender: BrowserWindow]
+        ) => void
     ): () => void;
     static on<Type extends MainMessageType>(
         message: Type,
-        handlerOrSource: BrowserWindow | ((data: MainMessagePayloads[Type]) => void),
-        handler?: (data: MainMessagePayloads[Type]) => void
+        handlerOrSource:
+            | BrowserWindow
+            | ((
+                  ...args: MainMessagePayloads[Type] extends never
+                      ? [sender: BrowserWindow]
+                      : [message: MainMessagePayloads[Type], sender: BrowserWindow]
+              ) => void),
+        handler?: (
+            ...args: MainMessagePayloads[Type] extends never
+                ? [sender: BrowserWindow]
+                : [message: MainMessagePayloads[Type], sender: BrowserWindow]
+        ) => void
     ): () => void {
+        if (!isMainThread) return () => {};
+
         let handlers = this.handlers.get(message);
         if (!handlers) {
             handlers = [];
             this.handlers.set(message, handlers);
         }
 
+        let callback: MessageHandler['callback'];
+
         if (handlerOrSource instanceof BrowserWindow) {
             if (!handler) {
                 throw new Error('Handler not specified for source');
             }
-            handlers.push({ source: handlerOrSource, callback: handler });
+            callback = handler;
+            handlers.push({ source: handlerOrSource, callback });
         } else {
-            handlers.push({ source: null, callback: handlerOrSource });
+            callback = handlerOrSource;
+            handlers.push({ source: null, callback });
         }
 
         return () => {
-            const idx = handlers.findIndex(h => h.callback === handler);
+            const idx = handlers.findIndex(h => h.callback === callback);
             if (idx === -1) return;
 
             handlers.splice(idx, 1);
@@ -87,8 +116,20 @@ export default class Messager {
         };
     }
 
+    static func<Fn extends keyof InvocationMap>(
+        func: Fn,
+        handler: (request: InvocationMap[Fn]['request']) => InvocationMap[Fn]['response']
+    ): void {
+        if (!isMainThread) return;
+
+        ipcMain.removeHandler(func);
+        ipcMain.handle(func, (event, request: InvocationMap[Fn]['request']) => {
+            return handler(request);
+        });
+    }
+
     static initialize(): void {
-        if (this.initialized) return;
+        if (this.initialized || !isMainThread) return;
         this.initialized = true;
 
         ipcMain.handle('message', (event, message: MainMessage<any>) => {
@@ -97,7 +138,11 @@ export default class Messager {
             for (const handler of handlers) {
                 try {
                     if (handler.source && handler.source.webContents.id !== event.sender.id) continue;
-                    handler.callback(message);
+                    const sender = BrowserWindow.getAllWindows().find(
+                        window => window.webContents.id === event.sender.id
+                    );
+                    if (message.payload) handler.callback(message.payload, sender);
+                    else handler.callback(sender);
                 } catch (error) {
                     console.error(`Error handling message ${message.type}`, error);
                 }

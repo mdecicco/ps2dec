@@ -147,14 +147,15 @@ export class SSAControlFlowAnalyzer {
         const stmts: nodes.StatementNode[] = [];
 
         const allowedBranches = new Set([Op.Code.b, Op.Code.jal, Op.Code.jalr, Op.Code.j, Op.Code.jr]);
+        const skipIndices = new Set<number>();
 
-        for (const instr of instructions) {
-            if (instr.isBranch && !allowedBranches.has(instr.code)) continue;
+        const handleInstr = (instr: i.Instruction) => {
+            if (instr.isBranch && !allowedBranches.has(instr.code)) return;
 
-            if (decomp.isAddressIgnored(instr.address)) continue;
+            if (decomp.isAddressIgnored(instr.address)) return;
 
             // If this is the step instruction for any loop we're in, skip it
-            if (this.m_astLoopStack.some(loop => loop.inductionVar!.stepInstruction === instr)) continue;
+            if (this.m_astLoopStack.some(loop => loop.inductionVar!.stepInstruction === instr)) return;
 
             if (instr.code === Op.Code.jr && Reg.compare(instr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })) {
                 let retString = 'return';
@@ -172,13 +173,29 @@ export class SSAControlFlowAnalyzer {
 
                 const stmt = this.m_builder.createStatement(
                     this.m_builder.createExpression(instr, false, () => {
-                        const gen = new Expr.RawString(retString);
+                        const gen = new Expr.RawString(retString, null, code => {
+                            code.keyword('return');
+
+                            if (currentFunc.returnLocation) {
+                                code.whitespace(1);
+
+                                let retExpr: Expr.Expression | null = null;
+                                if ('reg' in currentFunc.returnLocation) {
+                                    retExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.reg);
+                                } else {
+                                    retExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.offset);
+                                }
+
+                                if (retExpr) code.expression(retExpr);
+                                else code.comment('Failed to determine return value');
+                            }
+                        });
                         gen.address = instr.address;
                         return gen;
                     })
                 );
                 stmts.push(stmt);
-                continue;
+                return;
             }
 
             let omit = false;
@@ -209,6 +226,18 @@ export class SSAControlFlowAnalyzer {
                 this.m_builder.createExpression(instr, omit, () => instr.toExpression())
             );
             stmts.push(stmt);
+        };
+
+        for (let i = 0; i < instructions.length; i++) {
+            if (skipIndices.has(i)) continue;
+
+            const instr = instructions[i];
+            if (instr.isBranch && !instr.isLikelyBranch) {
+                skipIndices.add(i + 1);
+                handleInstr(instructions[i + 1]);
+            }
+
+            handleInstr(instr);
         }
 
         return stmts;

@@ -11,7 +11,8 @@
             "decompiler": ["./packages/decompiler"],
             "decoder": ["./packages/decoder"],
             "utils": ["./packages/utils"],
-            "messages": ["./packages/messages"]
+            "messages": ["./packages/messages"],
+            "types": ["./packages/types"]
         },
         "sourceMap": true
     },

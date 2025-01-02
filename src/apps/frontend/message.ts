@@ -3,28 +3,37 @@ import {
     ClientMessage,
     ClientMessagePayloads,
     ClientMessageType,
+    InvocationMap,
     MainMessage,
     MainMessagePayloads,
     MainMessageType
 } from 'messages';
 
-type MessageHandler<Type extends ClientMessageType> = (message: ClientMessagePayloads[Type]) => void;
+type MessageHandler<Type extends ClientMessageType> = (...args: any[]) => void;
 
 export default class Messager {
     private static initialized: boolean = false;
     private static handlers: Map<ClientMessageType, MessageHandler<any>[]> = new Map();
 
-    static send<Type extends MainMessageType>(type: Type, data: MainMessagePayloads[Type]): void {
-        const message: MainMessage<Type> = {
-            type,
-            payload: data
-        };
+    static send<Type extends MainMessageType>(
+        type: Type,
+        ...args: MainMessagePayloads[Type] extends never ? [] : [data: MainMessagePayloads[Type]]
+    ): void {
+        const message: Partial<MainMessage<Type>> = { type };
+        if (args.length > 0) message.payload = args[0];
         ipcRenderer.invoke('message', message);
+    }
+
+    static invoke<Fn extends keyof InvocationMap>(
+        func: Fn,
+        ...args: InvocationMap[Fn]['request'] extends never ? [] : [data: InvocationMap[Fn]['request']]
+    ): Promise<InvocationMap[Fn]['response']> {
+        return ipcRenderer.invoke(func, args[0]);
     }
 
     static on<Type extends ClientMessageType>(
         message: Type,
-        handler: (data: ClientMessagePayloads[Type]) => void
+        handler: (...args: ClientMessagePayloads[Type] extends never ? [] : [data: ClientMessagePayloads[Type]]) => void
     ): () => void {
         let handlers = this.handlers.get(message);
         if (!handlers) {
@@ -53,7 +62,7 @@ export default class Messager {
             if (!handlers) return;
             for (const handler of handlers) {
                 try {
-                    handler(message);
+                    handler(message.payload);
                 } catch (error) {
                     console.error(`Error handling message ${message.type}`, error);
                 }

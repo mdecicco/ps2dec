@@ -26,7 +26,6 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
 
     constructor() {
         super();
-        this.initializePrimitiveTypes();
     }
 
     public static get(): TypeSystem {
@@ -36,7 +35,7 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
         return TypeSystem.instance;
     }
 
-    private initializePrimitiveTypes() {
+    initialize() {
         // Define our primitive types
         const primitives: Array<[string, number, boolean, boolean]> = [
             ['void', 0, false, false],
@@ -68,7 +67,11 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
         }
     }
 
-    private addType(type: DataType) {
+    get types(): DataType[] {
+        return Array.from(this.m_types.values());
+    }
+
+    addType(type: DataType) {
         if (this.m_typesByName.has(type.name)) {
             throw new Error(`Type '${type.name}' already exists`);
         }

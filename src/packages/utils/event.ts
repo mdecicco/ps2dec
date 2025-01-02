@@ -40,7 +40,7 @@ export class EventProducer<Events extends EventMap> {
         };
     }
 
-    protected dispatch<Event extends keyof Events>(event: Event, ...args: Parameters<Events[Event]>) {
+    dispatch<Event extends keyof Events>(event: Event, ...args: Parameters<Events[Event]>) {
         if (!(event in this.m_listeners)) return [];
         const map = this.m_listeners[event] as ListenerMap<Events, Event>;
         map.forEach(cb => {

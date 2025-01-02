@@ -228,9 +228,13 @@ export class SSALoopAnalyzer {
         condition: LoopCondition,
         blocks: Set<BasicBlock>
     ): { loopType: LoopType; inductionVar: InductionVariable | null } {
-        const inductionVar = this.findInductionVariable(header, condition, blocks);
-        if (inductionVar) {
-            return { loopType: LoopType.For, inductionVar };
+        try {
+            const inductionVar = this.findInductionVariable(header, condition, blocks);
+            if (inductionVar) {
+                return { loopType: LoopType.For, inductionVar };
+            }
+        } catch (e) {
+            console.warn('Failed to find induction variable for loop', e);
         }
 
         return { loopType: LoopType.While, inductionVar: null };
