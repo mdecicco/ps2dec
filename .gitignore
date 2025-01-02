@@ -1,3 +1,5 @@
 node_modules
 ref
 old
+build
+*.mjs
