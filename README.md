@@ -38,4 +38,6 @@ There is also a UI component for this which I'll upload once I refactor it to us
 ...Believe it or not the hard part is mostly over
 
 ## Progress
-![image](https://github.com/user-attachments/assets/554eee28-2640-4609-8b3f-7354f5937887)
+![image](https://github.com/user-attachments/assets/1157bb17-439f-493a-a545-bcc47258d367)
+Getting closer... Need some function argument/return value analyzation steps
+
