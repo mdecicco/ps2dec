@@ -634,8 +634,9 @@ export abstract class Expression {
     }
 
     generate(code: CodeBuilder): void {
-        code.setCurrentAddress(this.address);
+        code.pushAddress(this.address);
         this.generate_impl(code);
+        code.popAddress();
     }
 
     toString(): string {
@@ -2284,6 +2285,10 @@ export class Load extends Expression {
                 this.type = stackType;
             }
         } else {
+            this.type = TypeSystem.get().getType(`${this.m_isUnassigned ? 'u' : 'i'}${this.m_size * 8}`);
+        }
+
+        if (this.type.size !== size) {
             this.type = TypeSystem.get().getType(`${this.m_isUnassigned ? 'u' : 'i'}${this.m_size * 8}`);
         }
     }

@@ -12,6 +12,8 @@ import { MainActionService } from 'apps/backend/services/ActionService';
 
 let mainWindow: BrowserWindow | null = null;
 
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192');
+
 app.once('ready', () => {
     Messager.initialize();
     MainActionService.initialize();

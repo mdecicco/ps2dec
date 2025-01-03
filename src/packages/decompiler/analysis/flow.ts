@@ -408,6 +408,7 @@ export class SSAControlFlowAnalyzer {
                 this.generateForLoop(ast, code);
                 break;
             case nodes.NodeType.WhileLoop:
+                code.pushAddress(ast.condition.instruction.address);
                 code.keyword('while');
                 code.whitespace(1);
                 code.punctuation('(');
@@ -415,22 +416,32 @@ export class SSAControlFlowAnalyzer {
                 code.punctuation(')');
                 code.whitespace(1);
                 code.punctuation('{');
+                code.popAddress();
+
                 code.indent();
                 code.newLine();
                 this.generate(ast.body, code);
                 code.unindent();
                 code.newLine();
+
+                code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
+                code.popAddress();
                 break;
             case nodes.NodeType.DoWhileLoop:
+                code.pushAddress(ast.condition.instruction.address);
                 code.keyword('do');
                 code.whitespace(1);
                 code.punctuation('{');
+                code.popAddress();
+
                 code.indent();
                 code.newLine();
                 this.generate(ast.body, code);
                 code.unindent();
                 code.newLine();
+
+                code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
                 code.whitespace(1);
                 code.keyword('while');
@@ -438,8 +449,10 @@ export class SSAControlFlowAnalyzer {
                 code.punctuation('(');
                 this.generateCondition(ast.condition.expressionGen(), code);
                 code.punctuation(')');
+                code.popAddress();
                 break;
             case nodes.NodeType.If:
+                code.pushAddress(ast.condition.instruction.address);
                 code.keyword('if');
                 code.whitespace(1);
                 code.punctuation('(');
@@ -447,12 +460,17 @@ export class SSAControlFlowAnalyzer {
                 code.punctuation(')');
                 code.whitespace(1);
                 code.punctuation('{');
+                code.popAddress();
+
                 code.indent();
                 code.newLine();
                 this.generate(ast.body, code);
                 code.unindent();
                 code.newLine();
+
+                code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
+                code.popAddress();
                 break;
             case nodes.NodeType.IfElse:
                 const thenIsEmpty = !ast.thenBody.statements.some(
@@ -463,8 +481,11 @@ export class SSAControlFlowAnalyzer {
                 );
 
                 if (thenIsEmpty && elseIsEmpty) {
+                    code.pushAddress(ast.condition.instruction.address);
                     code.comment('// Empty if-else');
+                    code.popAddress();
                     code.newLine();
+
                     // still need to run the expression generators
                     ast.thenBody.statements.forEach(stmt => {
                         if (stmt.statement.type === nodes.NodeType.Expression) {
@@ -480,6 +501,7 @@ export class SSAControlFlowAnalyzer {
                 }
 
                 if (elseIsEmpty) {
+                    code.pushAddress(ast.condition.instruction.address);
                     code.keyword('if');
                     code.whitespace(1);
                     code.punctuation('(');
@@ -487,12 +509,17 @@ export class SSAControlFlowAnalyzer {
                     code.punctuation(')');
                     code.whitespace(1);
                     code.punctuation('{');
+                    code.popAddress();
+
                     code.indent();
                     code.newLine();
                     this.generate(ast.thenBody, code);
                     code.unindent();
                     code.newLine();
+
+                    code.pushAddress(ast.condition.instruction.address);
                     code.punctuation('}');
+                    code.popAddress();
 
                     // still need to run the expression generators
                     ast.elseBody.statements.forEach(stmt => {
@@ -515,6 +542,7 @@ export class SSAControlFlowAnalyzer {
 
                     let cond = ast.condition.expressionGen();
 
+                    code.pushAddress(ast.condition.instruction.address);
                     code.keyword('if');
                     code.whitespace(1);
                     code.punctuation('(');
@@ -522,15 +550,21 @@ export class SSAControlFlowAnalyzer {
                     code.punctuation(')');
                     code.whitespace(1);
                     code.punctuation('{');
+                    code.popAddress();
+
                     code.indent();
                     code.newLine();
                     this.generate(ast.elseBody, code);
                     code.unindent();
                     code.newLine();
+
+                    code.pushAddress(ast.condition.instruction.address);
                     code.punctuation('}');
+                    code.popAddress();
                     break;
                 }
 
+                code.pushAddress(ast.condition.instruction.address);
                 code.keyword('if');
                 code.whitespace(1);
                 code.punctuation('(');
@@ -538,22 +572,31 @@ export class SSAControlFlowAnalyzer {
                 code.punctuation(')');
                 code.whitespace(1);
                 code.punctuation('{');
+                code.popAddress();
+
                 code.indent();
                 code.newLine();
                 this.generate(ast.thenBody, code);
                 code.unindent();
                 code.newLine();
+
+                code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
                 code.whitespace(1);
                 code.keyword('else');
                 code.whitespace(1);
                 code.punctuation('{');
+                code.popAddress();
+
                 code.indent();
                 code.newLine();
                 this.generate(ast.elseBody, code);
                 code.unindent();
                 code.newLine();
+
+                code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
+                code.popAddress();
                 break;
         }
     }
@@ -564,6 +607,8 @@ export class SSAControlFlowAnalyzer {
         if (decomp.isAddressIgnored(ast.instruction.address)) return;
 
         let didDeclareOrAssign = false;
+        code.pushAddress(ast.instruction.address);
+
         ast.instruction.writes.forEach(w => {
             const def = this.m_ssa.getDef(ast.instruction, w);
             if (!def) return;
@@ -600,6 +645,7 @@ export class SSAControlFlowAnalyzer {
             didDeclareOrAssign = true;
         });
 
+        code.popAddress();
         if (didDeclareOrAssign) return;
 
         const expr = ast.expressionGen();
@@ -625,8 +671,10 @@ export class SSAControlFlowAnalyzer {
         }
 
         if (expr instanceof Expr.Null) return;
+        code.pushAddress(ast.instruction.address);
         code.expression(expr);
         code.punctuation(';');
+        code.popAddress();
     }
 
     private generateForLoop(ast: nodes.ForLoopNode, code: CodeBuilder): void {
@@ -637,6 +685,7 @@ export class SSAControlFlowAnalyzer {
             ast.inductionVariable.initVersion
         );
 
+        code.pushAddress(ast.condition.instruction.address);
         code.keyword('for');
         code.whitespace(1);
         code.punctuation('(');
@@ -652,6 +701,7 @@ export class SSAControlFlowAnalyzer {
                 }
 
                 if (expr) {
+                    code.pushAddress(ast.init.statement.instruction.address);
                     code.dataType(ivar.type);
                     code.whitespace(1);
                     code.variable(ivar);
@@ -659,21 +709,27 @@ export class SSAControlFlowAnalyzer {
                     code.punctuation('=');
                     code.whitespace(1);
                     code.expression(expr);
+                    code.punctuation(';');
+                    code.popAddress();
                 }
             } else {
+                code.pushAddress(ast.init.statement.instruction.address);
                 code.expression(ast.init.statement.expressionGen());
+                code.punctuation(';');
+                code.popAddress();
             }
         } else {
             code.comment('/* init expr not found */');
+            code.punctuation(';');
         }
 
-        code.punctuation(';');
         code.whitespace(1);
         this.generateCondition(ast.condition.expressionGen(), code);
         code.punctuation(';');
         code.whitespace(1);
 
         if (ast.step.type === nodes.NodeType.Statement && ast.step.statement.type === nodes.NodeType.Expression) {
+            code.pushAddress(ast.step.statement.instruction.address);
             let didMinify = false;
             if (ivar) {
                 let expr: Expr.Expression | null = ast.step.statement.expressionGen();
@@ -747,6 +803,7 @@ export class SSAControlFlowAnalyzer {
             }
 
             if (!didMinify) code.expression(ast.step.statement.expressionGen());
+            code.popAddress();
         }
 
         code.punctuation(')');
@@ -768,7 +825,6 @@ export class SSAControlFlowAnalyzer {
                     stmt.statement.instruction === ast.step.statement.instruction
                 )
                     return;
-
                 this.generateExpression(stmt.statement, code);
             } else this.generate(stmt.statement, code);
 
@@ -778,5 +834,6 @@ export class SSAControlFlowAnalyzer {
         code.unindent();
         code.newLine();
         code.punctuation('}');
+        code.popAddress();
     }
 }

@@ -49,6 +49,8 @@ type DataTypeEvents = {
     'size-changed': (newSize: number, oldSize: number) => void;
     'property-added': (prop: TypeProperty) => void;
     'method-added': (method: Method) => void;
+    'method-replaced': (newMethod: Method, oldMethod: Method) => void;
+    'method-removed': (method: Method) => void;
     'base-added': (base: TypeInheritance) => void;
     'enum-field-added': (name: string, value: number) => void;
     'bitfield-field-added': (name: string, bitIndex: number) => void;
@@ -201,6 +203,24 @@ export class StructureType extends DataType {
     addMethod(method: Method) {
         this.m_methods.push(method);
         this.dispatch('method-added', method);
+    }
+
+    replaceMethod(oldMethod: Method, newMethod: Method) {
+        this.m_methods.some((m, idx) => {
+            if (m !== oldMethod) return false;
+            this.m_methods[idx] = newMethod;
+            this.dispatch('method-replaced', newMethod, oldMethod);
+            return true;
+        });
+    }
+
+    removeMethod(method: Method) {
+        this.m_methods.some((m, idx) => {
+            if (m !== method) return false;
+            this.m_methods.splice(idx, 1);
+            this.dispatch('method-removed', method);
+            return true;
+        });
     }
 
     addProperty(name: string, offset: number, type: DataType) {

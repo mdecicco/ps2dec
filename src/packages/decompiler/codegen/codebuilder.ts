@@ -148,7 +148,7 @@ export class CodeBuilder {
     private m_indent: number;
     private m_currentLine: number;
     private m_currentColumn: number;
-    private m_currentAddress: number;
+    private m_currentAddressStack: number[];
     private m_ssa: SSAForm;
     private m_options: CodeBuilderOptions;
 
@@ -163,7 +163,7 @@ export class CodeBuilder {
         this.m_indent = 0;
         this.m_currentLine = 1;
         this.m_currentColumn = 1;
-        this.m_currentAddress = 0;
+        this.m_currentAddressStack = [];
         this.m_ssa = ssa;
         this.m_options = {
             tabWidth: 4,
@@ -243,8 +243,12 @@ export class CodeBuilder {
         }
     }
 
-    setCurrentAddress(address: number) {
-        this.m_currentAddress = address;
+    pushAddress(address: number) {
+        this.m_currentAddressStack.push(address);
+    }
+
+    popAddress() {
+        this.m_currentAddressStack.pop();
     }
 
     variable(variable: Value) {
@@ -412,12 +416,12 @@ export class CodeBuilder {
 
     private add(annotation: SourceAnnotation) {
         if (this.m_currentColumn === 1 && this.m_indent > 0 && annotation.type !== SourceAnnotationType.Whitespace) {
-            this.m_currentColumn = this.m_options.tabWidth * this.m_indent + 1;
             this.add({
                 type: SourceAnnotationType.Whitespace,
                 length: this.m_options.tabWidth * this.m_indent,
                 isNewLine: false
             });
+            this.m_currentColumn = 1 + this.m_options.tabWidth * this.m_indent;
         }
 
         this.m_annotations.push(annotation);
@@ -457,21 +461,27 @@ export class CodeBuilder {
             endColumn: this.m_currentColumn
         };
 
-        const addrLocMap = this.m_addressLocationMap.get(this.m_currentAddress);
-        if (addrLocMap) {
-            addrLocMap.push(srcLoc);
-            this.m_addressLocationMap.set(this.m_currentAddress, addrLocMap);
-        } else {
-            this.m_addressLocationMap.set(this.m_currentAddress, [srcLoc]);
-        }
+        const seenAddresses = new Set<number>();
+        this.m_currentAddressStack.forEach(addr => {
+            if (seenAddresses.has(addr)) return;
+            seenAddresses.add(addr);
 
-        const locAddrMap = this.m_locationAddressMap.get(srcLoc);
-        if (locAddrMap) {
-            locAddrMap.push(this.m_currentAddress);
-            this.m_locationAddressMap.set(srcLoc, locAddrMap);
-        } else {
-            this.m_locationAddressMap.set(srcLoc, [this.m_currentAddress]);
-        }
+            const addrLocMap = this.m_addressLocationMap.get(addr);
+            if (addrLocMap) {
+                addrLocMap.push(srcLoc);
+                this.m_addressLocationMap.set(addr, addrLocMap);
+            } else {
+                this.m_addressLocationMap.set(addr, [srcLoc]);
+            }
+
+            const locAddrMap = this.m_locationAddressMap.get(srcLoc);
+            if (locAddrMap) {
+                locAddrMap.push(addr);
+                this.m_locationAddressMap.set(srcLoc, locAddrMap);
+            } else {
+                this.m_locationAddressMap.set(srcLoc, [addr]);
+            }
+        });
 
         const lineRange = this.m_lineRanges.get(this.m_currentLine)!;
         lineRange.endOffset = srcLoc.endOffset;
@@ -601,6 +611,10 @@ export class Decompilation {
         return this.m_lineRanges.size;
     }
 
+    get lineRanges() {
+        return this.m_lineRanges;
+    }
+
     getLineAnnotations(line: number) {
         return this.m_lineAnnotationMap.get(line) || [];
     }
@@ -615,5 +629,9 @@ export class Decompilation {
         }
 
         return addresses;
+    }
+
+    getLocationsForAddress(address: number): SourceLocation[] {
+        return this.m_addressLocationMap.get(address) || [];
     }
 }

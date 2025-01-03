@@ -1,7 +1,7 @@
 import { SerializedDecompilation } from 'decompiler';
 import { ClientMessagePayloads, ClientMessageType } from 'packages/messages/client';
 import { MainMessagePayloads, MainMessageType } from 'packages/messages/main';
-import { AnnotationModel, FunctionModel, MemoryRegionModel, RenderedRow } from 'packages/types';
+import { AnnotationModel, DataTypeModel, FunctionModel, MemoryRegionModel, RenderedRow, VTableModel } from 'types';
 
 export * from './client';
 export * from './main';
@@ -31,6 +31,8 @@ export type InvocationMap = {
     getRowAtAddress: Invocation<number, number>;
     getMemoryRegions: Invocation<never, MemoryRegionModel[]>;
     getFunctions: Invocation<never, FunctionModel[]>;
+    getDataTypes: Invocation<never, DataTypeModel[]>;
+    getVTables: Invocation<never, VTableModel[]>;
     renderAnnotation: Invocation<AnnotationModel, RenderedRow[]>;
     renderRows: Invocation<{ startRow: number; rowCount: number }, RenderedRow[]>;
     readBytes: Invocation<{ address: number; count: number }, Uint8Array>;

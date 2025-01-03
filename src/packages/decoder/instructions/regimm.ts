@@ -28,11 +28,11 @@ export class bgez extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
         const cond = new Expr.IsGreaterOrEqual(lhs, rhs);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number);
         return expr;
     }
 }
@@ -61,14 +61,14 @@ export class bgezal extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
 
         const cond = new Expr.IsGreaterOrEqual(lhs, rhs);
         decomp.setRegister(this.writes[0], returnAddress);
 
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number);
         return expr;
     }
 }
@@ -98,14 +98,14 @@ export class bgezall extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
 
         const cond = new Expr.IsGreaterOrEqual(lhs, rhs);
         decomp.setRegister(this.writes[0], returnAddress);
 
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number, true);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number, true);
         return expr;
     }
 }
@@ -135,11 +135,11 @@ export class bgezl extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
         const cond = new Expr.IsGreaterOrEqual(lhs, rhs);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number, true);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number, true);
         return expr;
     }
 }
@@ -168,11 +168,11 @@ export class bltz extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
         const cond = new Expr.IsLess(lhs, rhs);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number);
         return expr;
     }
 }
@@ -201,13 +201,13 @@ export class bltzal extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
 
         const cond = new Expr.IsLess(lhs, rhs);
         decomp.setRegister(this.writes[0], returnAddress);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number);
         return expr;
     }
 }
@@ -237,13 +237,13 @@ export class bltzall extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
 
         const cond = new Expr.IsLess(lhs, rhs);
         decomp.setRegister(this.writes[0], returnAddress);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number, true);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number, true);
         return expr;
     }
 }
@@ -273,11 +273,11 @@ export class bltzl extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
+        const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
         const cond = new Expr.IsLess(lhs, rhs);
-        const expr = new Expr.ConditionalBranch(cond, this.operands[2] as number, true);
+        const expr = new Expr.ConditionalBranch(cond, this.operands[1] as number, true);
         return expr;
     }
 }
@@ -304,7 +304,6 @@ export class teqi extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsEqual(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -333,13 +332,12 @@ export class tgei extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsGreaterOrEqual(
             decomp.getRegister(this.reads[0]),
             Expr.Imm.i32(this.operands[1] as number)
         );
 
-        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap(0x${code.toString(16)})`));
+        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
     }
 }
 
@@ -365,14 +363,13 @@ export class tgeiu extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsGreaterOrEqual(
             decomp.getRegister(this.reads[0]),
             Expr.Imm.i32(this.operands[1] as number),
             true
         );
 
-        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap(0x${code.toString(16)})`));
+        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
     }
 }
 
@@ -398,10 +395,9 @@ export class tlti extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
-        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap(0x${code.toString(16)})`));
+        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
     }
 }
 
@@ -427,7 +423,6 @@ export class tltiu extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number), true);
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -456,10 +451,9 @@ export class tnei extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const code = this.operands[0] as number;
         const cond = new Expr.IsNotEqual(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
-        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap(0x${code.toString(16)})`));
+        return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
     }
 }
 

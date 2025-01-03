@@ -1,6 +1,8 @@
-import { CssBaseline, GlobalStyles, ThemeProvider } from '@mui/material';
+import { CircularProgress, CssBaseline, GlobalStyles, ThemeProvider } from '@mui/material';
 import React from 'react';
 
+import { CenteredContent, NoContent } from 'apps/frontend/components';
+import { AppProvider } from 'apps/frontend/context';
 import { useProject } from 'apps/frontend/hooks/useProject';
 import Messager from 'apps/frontend/message';
 import { darkTheme } from 'apps/frontend/theme';
@@ -10,10 +12,26 @@ import { FunctionView } from 'apps/frontend/views/FunctionView';
 import { WelcomeView } from 'apps/frontend/views/WelcomeView';
 import { ViewId } from 'packages/types';
 
-const App: React.FC = () => {
-    const [view, setView] = React.useState<ViewId | null>(null);
-    const project = useProject();
+type TopLevelProps = {
+    viewId: ViewId;
+};
 
+const TopLevel: React.FC<TopLevelProps> = props => {
+    switch (props.viewId) {
+        case 'welcome':
+            return <WelcomeView />;
+        case 'disassembly':
+            return <DisassemblyView />;
+        case 'decompilation':
+            return <DecompilationView />;
+        case 'functions':
+            return <FunctionView />;
+    }
+};
+
+const App: React.FC = () => {
+    const project = useProject();
+    const [view, setView] = React.useState<ViewId | null>(null);
     React.useEffect(() => {
         const unbind = Messager.on('setViewId', (viewId: ViewId) => {
             setView(viewId);
@@ -26,56 +44,41 @@ const App: React.FC = () => {
         };
     }, []);
 
-    if (!project.path && view !== 'welcome') {
+    if (!view) {
         return (
-            <ThemeProvider theme={darkTheme}>
-                <CssBaseline />
-                <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-            </ThemeProvider>
+            <AppProvider>
+                <ThemeProvider theme={darkTheme}>
+                    <CssBaseline />
+                    <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
+                    <CenteredContent>
+                        <CircularProgress />
+                    </CenteredContent>
+                </ThemeProvider>
+            </AppProvider>
         );
     }
 
-    switch (view) {
-        case 'welcome':
-            return (
+    if (!project.path && view !== 'welcome') {
+        return (
+            <AppProvider>
                 <ThemeProvider theme={darkTheme}>
                     <CssBaseline />
                     <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-                    <WelcomeView />
+                    <NoContent title='No Project Loaded' />
                 </ThemeProvider>
-            );
-        case 'disassembly':
-            return (
-                <ThemeProvider theme={darkTheme}>
-                    <CssBaseline />
-                    <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-                    <DisassemblyView />
-                </ThemeProvider>
-            );
-        case 'decompilation':
-            return (
-                <ThemeProvider theme={darkTheme}>
-                    <CssBaseline />
-                    <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-                    <DecompilationView />
-                </ThemeProvider>
-            );
-        case 'functions':
-            return (
-                <ThemeProvider theme={darkTheme}>
-                    <CssBaseline />
-                    <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-                    <FunctionView />
-                </ThemeProvider>
-            );
-        default:
-            return (
-                <ThemeProvider theme={darkTheme}>
-                    <CssBaseline />
-                    <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
-                </ThemeProvider>
-            );
+            </AppProvider>
+        );
     }
+
+    return (
+        <AppProvider>
+            <ThemeProvider theme={darkTheme}>
+                <CssBaseline />
+                <GlobalStyles styles={{ body: { backgroundColor: '#1e1e1e' } }} />
+                <TopLevel viewId={view} />
+            </ThemeProvider>
+        </AppProvider>
+    );
 };
 
 export default App;

@@ -1,8 +1,26 @@
 import { EventListener } from 'utils';
-import { Value, ValueLocation } from '../value';
+import { SerializedValue, Value, ValueLocation } from '../value';
 import { DataType, FunctionSignatureType, MethodSignatureType } from './datatype';
 import { TypeSystem } from './typesys';
 import { VTableMethod } from './vtable';
+
+export type FuncRehydrateData = {
+    id: number;
+    address: number;
+    args: SerializedValue[];
+    retLocation: ValueLocation | null;
+    signatureId: number;
+    name: string;
+    isConstructor: boolean;
+    isDestructor: boolean;
+    methodInfo: {
+        thisTypeId: number;
+        vtableMethod: {
+            vtableId: number;
+            methodOffset: number;
+        } | null;
+    } | null;
+};
 
 export class Func {
     private m_id: number;
@@ -151,6 +169,33 @@ export class Func {
 
         this.m_args = newArgInfo;
     }
+
+    static rehydrate(data: FuncRehydrateData): Func | Method {
+        if (data.methodInfo) {
+            return Method.rehydrate(data);
+        }
+
+        const fn = Object.create(Func.prototype) as Func;
+        fn.setFromRehydrateData(data);
+        return fn;
+    }
+
+    protected setFromRehydrateData(data: FuncRehydrateData) {
+        this.m_id = data.id;
+        this.m_address = data.address;
+        this.m_retLocation = data.retLocation;
+        this.m_signatureId = data.signatureId;
+        this.m_name = data.name;
+        this.m_isConstructor = data.isConstructor;
+        this.m_isDestructor = data.isDestructor;
+        this.m_valueListeners = [];
+        this.m_args = data.args.map((arg, idx) => {
+            const value = Value.deserialize(arg);
+            const typeListener = value.addListener('type-changed', this.setArgType.bind(this, idx));
+            this.m_valueListeners.push(typeListener);
+            return value;
+        });
+    }
 }
 
 export class Method extends Func {
@@ -179,5 +224,32 @@ export class Method extends Func {
 
     get thisValue() {
         return this.m_thisValue;
+    }
+
+    static rehydrate(data: FuncRehydrateData): Func | Method {
+        if (!data.methodInfo) {
+            return Func.rehydrate(data);
+        }
+
+        const fn = Object.create(Method.prototype) as Method;
+        fn.setFromRehydrateData(data);
+        fn.m_thisValue = new Value(data.methodInfo.thisTypeId, 'this');
+
+        if (data.methodInfo.vtableMethod) {
+            const vtb = TypeSystem.get().getVtableById(data.methodInfo.vtableMethod.vtableId);
+            if (!vtb) {
+                throw new Error(`Method.rehydrate: Specified vtable not found`);
+            }
+
+            const offset = data.methodInfo.vtableMethod.methodOffset;
+            const meth = vtb.methods.find(m => m.offset === offset);
+            if (!meth) {
+                throw new Error(`Method.rehydrate: Specified method offset not found on vtable`);
+            }
+
+            fn.m_vtbEntry = meth;
+        }
+
+        return fn;
     }
 }

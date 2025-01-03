@@ -1,5 +1,5 @@
 import { Box } from '@mui/material';
-import { useElementHeight } from 'apps/frontend/hooks';
+import { useElementSize } from 'apps/frontend/hooks';
 import React, { ForwardedRef, forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ScrollBar } from './ScrollBar';
 
@@ -70,7 +70,7 @@ export const VirtualScroll = forwardRef((props: VirtualScrollProps, ref: Forward
     const [pages, setPages] = useState<RowPage[]>([]);
     const [loadingRows, setLoadingRows] = useState(false);
     const loadTimeout = useRef<number | null>(null);
-    const box = useElementHeight<HTMLDivElement>();
+    const box = useElementSize<HTMLDivElement>();
 
     const totalHeight = props.totalRows * props.rowHeight + 20;
     const viewSize = box.height;

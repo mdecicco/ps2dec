@@ -82,7 +82,6 @@ export type ClientMessagePayloads = {
         previous: DataTypeModel;
         current: DataTypeModel;
     };
-    setDataTypes: DataTypeModel[];
 
     // Disassembly
     gotoAddress: number;

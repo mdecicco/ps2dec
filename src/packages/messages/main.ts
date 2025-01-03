@@ -20,9 +20,6 @@ export type MainMessagePayloads = {
     // Memory
     promptLoadElf: never;
 
-    // Data Types
-    getDataTypes: never;
-
     // Annotations
     addAnnotation: AnnotationModel;
     removeAnnotation: number;

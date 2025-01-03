@@ -119,12 +119,12 @@ export class DataTypeService {
             DataTypeService.m_tsVTableMap.set(vt.id, DataTypeService.toTypeSystem(vt));
         }
 
-        Messager.on('getDataTypes', sender => {
-            Messager.send(
-                'setDataTypes',
-                sender,
-                DataTypeService.dataTypes.map(dataType => dataType.toModel())
-            );
+        Messager.func('getDataTypes', () => {
+            return DataTypeService.dataTypes.map(dataType => dataType.toModel());
+        });
+
+        Messager.func('getVTables', () => {
+            return DataTypeService.vtables.map(vt => vt.toModel());
         });
 
         const ts = TypeSystem.get();
@@ -173,6 +173,10 @@ export class DataTypeService {
 
     public static get dataTypes() {
         return Array.from(DataTypeService.m_dataTypesById.values());
+    }
+
+    public static get vtables() {
+        return Array.from(DataTypeService.m_vTablesById.values());
     }
 
     private static async onTypeAdded(type: DataType) {

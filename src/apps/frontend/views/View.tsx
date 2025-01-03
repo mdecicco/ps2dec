@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 type ViewBaseProps = {
     children: React.ReactNode;
     noProgressDisplay?: boolean;
+    style?: React.CSSProperties;
 };
 
 type SubMenuItemProps = {
@@ -142,7 +143,7 @@ const ViewComp: React.FC<ViewBaseProps> = props => {
                     />
                 </Paper>
             ) : null}
-            <Box sx={{ display: 'grid', flexGrow: 1, overflow: 'hidden' }}>{children}</Box>
+            <Box sx={{ display: 'grid', flexGrow: 1, overflow: 'hidden', ...props.style }}>{children}</Box>
         </Box>
     );
 };

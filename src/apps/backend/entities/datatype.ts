@@ -105,19 +105,19 @@ export class DataTypeEntity {
     toModel(): DataTypeModel {
         switch (this.classType) {
             case 'primitive':
-                return this.primitive!.toModel();
+                return this.primitive!.toModel(this);
             case 'pointer':
-                return this.pointer!.toModel();
+                return this.pointer!.toModel(this);
             case 'array':
-                return this.array!.toModel();
+                return this.array!.toModel(this);
             case 'structure':
-                return this.structure!.toModel();
+                return this.structure!.toModel(this);
             case 'signature':
-                return this.signature!.toModel();
+                return this.signature!.toModel(this);
             case 'enum':
-                return this.enum!.toModel();
+                return this.enum!.toModel(this);
             case 'bitfield':
-                return this.bitfield!.toModel();
+                return this.bitfield!.toModel(this);
         }
     }
 }
@@ -137,15 +137,15 @@ export class PrimitiveTypeEntity {
     @JoinColumn({ name: 'id' })
     type!: DataTypeEntity;
 
-    toModel(): PrimitiveTypeModel {
+    toModel(parent: DataTypeEntity): PrimitiveTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'primitive',
             isSigned: this.isSigned,
             isFloatingPoint: this.isFloatingPoint,
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -166,14 +166,14 @@ export class PointerTypeEntity {
     @JoinColumn({ name: 'pointsToId' })
     pointsTo!: DataTypeEntity;
 
-    toModel(): PointerTypeModel {
+    toModel(parent: DataTypeEntity): PointerTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'pointer',
             pointsToId: this.pointsToId,
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -197,15 +197,15 @@ export class ArrayTypeEntity {
     @Column('int')
     length!: number;
 
-    toModel(): ArrayTypeModel {
+    toModel(parent: DataTypeEntity): ArrayTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'array',
             elementTypeId: this.elementTypeId,
             length: this.length,
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -411,17 +411,17 @@ export class StructureTypeEntity {
     @OneToMany(() => StructureInheritanceEntity, inheritance => inheritance.structure, { eager: true })
     baseTypes!: StructureInheritanceEntity[];
 
-    toModel(): StructureTypeModel {
+    toModel(parent: DataTypeEntity): StructureTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'structure',
             vtableId: this.vtableId,
             fields: this.fields.map(field => field.toModel()),
             methods: this.methods.map(method => method.toModel()),
             baseTypes: this.baseTypes.map(base => base.toModel()),
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -493,17 +493,17 @@ export class FunctionSignatureEntity {
     })
     callConfig!: CallConfig;
 
-    toModel(): FunctionSignatureModel {
+    toModel(parent: DataTypeEntity): FunctionSignatureModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'signature',
             returnTypeId: this.returnTypeId,
             thisTypeId: this.thisTypeId,
             arguments: this.arguments.map(argument => argument.toModel()),
             callConfig: this.callConfig,
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -559,15 +559,15 @@ export class EnumTypeEntity {
     @OneToMany(() => EnumFieldEntity, field => field.enum, { eager: true })
     fields!: EnumFieldEntity[];
 
-    toModel(): EnumTypeModel {
+    toModel(parent: DataTypeEntity): EnumTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'enum',
             underlyingTypeId: this.underlyingTypeId,
             fields: this.fields.map(field => field.toModel()),
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }
@@ -623,15 +623,15 @@ export class BitfieldTypeEntity {
     @OneToMany(() => BitfieldFieldEntity, field => field.bitfield)
     fields!: BitfieldFieldEntity[];
 
-    toModel(): BitfieldTypeModel {
+    toModel(parent: DataTypeEntity): BitfieldTypeModel {
         return {
             id: this.id,
-            name: this.type.name,
-            size: this.type.size,
+            name: parent.name,
+            size: parent.size,
             classType: 'bitfield',
             underlyingTypeId: this.underlyingTypeId,
             fields: this.fields.map(field => field.toModel()),
-            isDeleted: this.type.isDeleted
+            isDeleted: parent.isDeleted
         };
     }
 }

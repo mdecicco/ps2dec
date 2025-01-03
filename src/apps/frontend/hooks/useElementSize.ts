@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-export function useElementHeight<ElementType extends HTMLElement>() {
-    const [height, setHeight] = useState(0);
+export function useElementSize<ElementType extends HTMLElement>() {
+    const [size, setSize] = useState({ width: 0, height: 0 });
     const ref = useRef<ElementType | null>(null);
 
     useEffect(() => {
         const observer = new ResizeObserver(entries => {
             if (entries.length === 0) return;
-            const { height } = entries[0].contentRect;
-            setHeight(height);
+            const { width, height } = entries[0].contentRect;
+            setSize({ width, height });
         });
 
         if (ref.current) {
@@ -18,5 +18,5 @@ export function useElementHeight<ElementType extends HTMLElement>() {
         return () => observer.disconnect();
     }, [ref.current]);
 
-    return { height, ref };
+    return { width: size.width, height: size.height, ref };
 }
