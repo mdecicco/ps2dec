@@ -41,3 +41,5 @@ There is also a UI component for this which I'll upload once I refactor it to us
 ![image](https://github.com/user-attachments/assets/1157bb17-439f-493a-a545-bcc47258d367)
 Getting closer... Need some function argument/return value analyzation steps
 
+Compared to Ghidra
+![image](https://github.com/user-attachments/assets/8a80fc11-fd48-4598-b3d0-7a5257f54106)
