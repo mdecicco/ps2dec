@@ -569,7 +569,8 @@ function getResultType(inType: DataType, isUnsigned?: boolean, bitWidth?: number
 }
 
 function immIsNice(value: bigint): boolean {
-    return value >= -128n && value <= 128n;
+    // If the hex would be the same as the decimal other than the '0x' then just show it as a decimal
+    return value >= -9n && value <= 9n;
 }
 
 export abstract class Expression {
@@ -661,6 +662,12 @@ export abstract class Expression {
         this.m_resultType = other.m_resultType;
         this.m_location = other.m_location;
         return this;
+    }
+
+    as(type: DataType | string) {
+        let tp = type instanceof DataType ? type : TypeSystem.get().getType(type);
+        if (this.type === tp) return this;
+        return new PrimitiveCast(this, tp);
     }
 
     get allChildren(): Expression[] {
@@ -1016,6 +1023,15 @@ export class Add extends BinaryExpression {
         if (rhsIsImm && rhs.value === 0n) return lhs;
         if (!lhsIsImm || !rhsIsImm) {
             if (lhs === this.m_lhs && rhs === this.m_rhs) return this;
+
+            if (rhsIsImm && foldConstants(rhs, Imm.typed(0n, rhs.type), 'lt').value === 1n) {
+                // Adding a negative number is the same as subtracting the positive version of that number
+                return new Sub(lhs, foldConstants(rhs, rhs, 'neg'), this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
+            } else if (lhsIsImm && foldConstants(lhs, Imm.typed(0n, lhs.type), 'lt').value === 1n) {
+                // Adding a negative number is the same as subtracting the positive version of that number
+                return new Sub(rhs, foldConstants(lhs, lhs, 'neg'), this.m_isUnsigned, this.m_bitWidth).copyFrom(this);
+            }
+
             return new Add(lhs, rhs).copyFrom(this);
         }
 
@@ -2169,6 +2185,22 @@ export class UnconditionalBranch extends Expression {
         if (this.m_branchAddress instanceof Imm) {
             // todo: check if target is a function
             const target = this.m_branchAddress.value;
+
+            if (target === BigInt(this.address)) {
+                code.keyword('while');
+                code.whitespace(1);
+                code.punctuation('(');
+                code.literal('true', TypeSystem.get().getType('bool'));
+                code.punctuation(')');
+                code.whitespace(1);
+                code.keyword('{');
+                code.whitespace(1);
+                code.comment('Infinite loop');
+                code.whitespace(1);
+                code.keyword('}');
+                return;
+            }
+
             code.keyword('goto');
             code.whitespace(1);
             code.plainText(`LBL_${target.toString(16).padStart(8, '0')}`);
@@ -3196,7 +3228,7 @@ export class Call extends Expression {
             }
 
             if ('reg' in a.location) {
-                decomp.getRegister(a.location.reg).generate(code);
+                decomp.getRegister(a.location.reg, this.address).generate(code);
             } else {
                 decomp.getStack(a.location.offset, this.address).generate(code);
             }

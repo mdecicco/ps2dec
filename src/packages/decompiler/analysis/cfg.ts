@@ -55,6 +55,156 @@ export class BasicBlock {
 
         return false;
     }
+
+    /**
+     * Iterate over the instructions in the block, calling the callback for each instruction.
+     * If the callback returns true, the iteration will stop.
+     *
+     * @param callback - The callback to call for each instruction.
+     * @param startFrom - The instruction to start from. If not provided, the iteration will start from the first instruction.
+     */
+    each(callback: (instr: i.Instruction) => any, startFrom?: i.Instruction): void {
+        let foundStart = startFrom ? false : true;
+        for (let i = 0; i < this.instructions.length; i++) {
+            const instr = this.instructions[i];
+
+            if (instr.isBranch && !instr.isLikelyBranch) {
+                if (!foundStart) foundStart = this.instructions[i + 1] === startFrom;
+                if (foundStart) {
+                    const result = callback(this.instructions[i + 1]);
+                    if (result === true) return;
+                }
+                i++;
+            }
+
+            if (!foundStart) foundStart = instr === startFrom;
+            if (foundStart) {
+                const result = callback(instr);
+                if (result === true) return;
+            }
+        }
+    }
+
+    /**
+     * Iterate over the instructions in the block in reverse order, calling the callback for each instruction.
+     * If the callback returns true, the iteration will stop.
+     *
+     * @param callback - The callback to call for each instruction.
+     * @param startFrom - The instruction to start from. If not provided, the iteration will start from the last instruction.
+     */
+    reverseEach(callback: (instr: i.Instruction) => any, startFrom?: i.Instruction): void {
+        let foundStart = startFrom ? false : true;
+        for (let i = this.instructions.length - 1; i >= 0; i--) {
+            const instr = this.instructions[i];
+            const prevInstr = i > 0 ? this.instructions[i - 1] : null;
+
+            if (prevInstr && prevInstr.isBranch && !prevInstr.isLikelyBranch) {
+                if (!foundStart) foundStart = prevInstr === startFrom;
+                if (foundStart) {
+                    const result = callback(prevInstr);
+                    if (result === true) return;
+                }
+                i--;
+            }
+
+            if (!foundStart) foundStart = instr === startFrom;
+            if (foundStart) {
+                const result = callback(instr);
+                if (result === true) return;
+            }
+        }
+    }
+
+    extract<T>(callback: (instr: i.Instruction) => T | null | undefined, startFrom?: i.Instruction): T | null {
+        let foundStart = startFrom ? false : true;
+        for (let i = 0; i < this.instructions.length; i++) {
+            const instr = this.instructions[i];
+
+            if (instr.isBranch && !instr.isLikelyBranch) {
+                if (!foundStart) foundStart = this.instructions[i + 1] === startFrom;
+                if (foundStart) {
+                    const result = callback(this.instructions[i + 1]);
+                    if (result) return result;
+                }
+                i++;
+            }
+
+            if (!foundStart) foundStart = instr === startFrom;
+            if (foundStart) {
+                const result = callback(instr);
+                if (result) return result;
+            }
+        }
+
+        return null;
+    }
+
+    reverseExtract<T>(callback: (instr: i.Instruction) => T | null | undefined, startFrom?: i.Instruction): T | null {
+        let foundStart = startFrom ? false : true;
+        for (let i = this.instructions.length - 1; i >= 0; i--) {
+            const instr = this.instructions[i];
+            const prevInstr = i > 0 ? this.instructions[i - 1] : null;
+
+            if (prevInstr && prevInstr.isBranch && !prevInstr.isLikelyBranch) {
+                if (!foundStart) foundStart = prevInstr === startFrom;
+                if (foundStart) {
+                    const result = callback(prevInstr);
+                    if (result) return result;
+                }
+                i--;
+            }
+
+            if (!foundStart) foundStart = instr === startFrom;
+            if (foundStart) {
+                const result = callback(instr);
+                if (result) return result;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Walk forward through the CFG starting from this block, calling the callback for each block.
+     * If the callback returns true, the walk will continue to the block's successors.
+     */
+    walkForward(callback: (block: BasicBlock) => boolean): void {
+        const workList: BasicBlock[] = [this];
+        const visited = new Set<number>();
+
+        while (workList.length > 0) {
+            const block = workList.shift();
+            if (!block) continue;
+
+            if (visited.has(block.startAddress)) continue;
+            visited.add(block.startAddress);
+
+            if (callback(block)) {
+                workList.push(...block.successors);
+            }
+        }
+    }
+
+    /**
+     * Walk backward through the CFG starting from this block, calling the callback for each block.
+     * If the callback returns true, the walk will continue to the block's predecessors.
+     */
+    walkBackward(callback: (block: BasicBlock) => boolean): void {
+        const workList: BasicBlock[] = [this];
+        const visited = new Set<number>();
+
+        while (workList.length > 0) {
+            const block = workList.shift();
+            if (!block) continue;
+
+            if (visited.has(block.startAddress)) continue;
+            visited.add(block.startAddress);
+
+            if (callback(block)) {
+                workList.push(...block.predecessors);
+            }
+        }
+    }
 }
 
 export class ControlFlowGraph {

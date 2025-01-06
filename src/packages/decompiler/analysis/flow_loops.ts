@@ -60,8 +60,12 @@ export class SSALoopAnalyzer {
             const isHeader = block.predecessors.some(pred => this.m_dominators.dominates(block, pred));
 
             if (isHeader) {
-                const loop = this.processLoopHeader(block, seenBlocks);
-                if (loop) this.m_loops.push(loop);
+                try {
+                    const loop = this.processLoopHeader(block, seenBlocks);
+                    if (loop) this.m_loops.push(loop);
+                } catch (e) {
+                    console.error(`Failed to process loop at 0x${block.startAddress.toString(16)}`, e);
+                }
             }
         }
 
@@ -220,7 +224,7 @@ export class SSALoopAnalyzer {
             return { instruction: branchesToHeader[0].instruction };
         }
 
-        throw new Error('Supposed loop has no branches to header');
+        throw new Error(`Supposed loop at 0x${header.startAddress.toString(16)} has no branches to header`);
     }
 
     private determineLoopType(

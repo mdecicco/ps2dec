@@ -523,7 +523,8 @@ export class lb extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 1
         });
     }
 
@@ -556,7 +557,8 @@ export class lbu extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 1
         });
     }
 
@@ -589,7 +591,8 @@ export class ld extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 8
         });
     }
 
@@ -622,7 +625,8 @@ export class ldl extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 8
         });
     }
 
@@ -675,7 +679,8 @@ export class ldr extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 8
         });
     }
 
@@ -728,7 +733,8 @@ export class lh extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 2
         });
     }
 
@@ -761,7 +767,8 @@ export class lhu extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 2
         });
     }
 
@@ -824,7 +831,8 @@ export class lw extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 4
         });
     }
 
@@ -857,7 +865,8 @@ export class lwl extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 4
         });
     }
 
@@ -910,7 +919,8 @@ export class lwr extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 4
         });
     }
 
@@ -963,7 +973,8 @@ export class lwu extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 4
         });
     }
 
@@ -1056,7 +1067,8 @@ export class sb extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 1
         });
     }
 
@@ -1089,7 +1101,8 @@ export class sd extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 8
         });
     }
 
@@ -1122,7 +1135,8 @@ export class sdl extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 8
         });
     }
 
@@ -1171,7 +1185,8 @@ export class sdr extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 8
         });
     }
 
@@ -1220,7 +1235,8 @@ export class sh extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 2
         });
     }
 
@@ -1317,7 +1333,8 @@ export class sw extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 4
         });
     }
 
@@ -1350,7 +1367,8 @@ export class swl extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 4
         });
     }
 
@@ -1399,7 +1417,8 @@ export class swr extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 4
         });
     }
 
@@ -1480,7 +1499,8 @@ export class lq extends Instruction {
             operands: [rt, { base, offset }],
             reads: [base],
             writes: [rt],
-            isLoad: true
+            isLoad: true,
+            memSize: 16
         });
     }
 
@@ -1513,7 +1533,8 @@ export class sq extends Instruction {
             operands: [rt, { base, offset }],
             reads: [rt, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 16
         });
     }
 
@@ -1546,7 +1567,8 @@ export class lwc1 extends Instruction {
             operands: [ft, { base, offset }],
             reads: [base],
             writes: [ft],
-            isLoad: true
+            isLoad: true,
+            memSize: 4
         });
     }
 
@@ -1577,7 +1599,8 @@ export class swc1 extends Instruction {
             operands: [ft, { base, offset }],
             reads: [ft, base],
             writes: [],
-            isStore: true
+            isStore: true,
+            memSize: 4
         });
     }
 

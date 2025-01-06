@@ -2,11 +2,19 @@ import React from 'react';
 
 import { Box } from '@mui/material';
 import { ElfBarrier, NoContent } from 'apps/frontend/components';
-import { useElementSize } from 'apps/frontend/hooks';
+import { useElementSize, useMemory } from 'apps/frontend/hooks';
 import { useFunctions } from 'apps/frontend/hooks/useFunctions';
 import Messager from 'apps/frontend/message';
 import { View } from 'apps/frontend/views/View';
-import { Decompilation, SerializedSourceAnnotation, SourceAnnotationType, SourceLocation } from 'decompiler';
+import { decode, i } from 'decoder';
+import {
+    Decompilation,
+    Decompiler,
+    DecompilerCache,
+    SerializedSourceAnnotation,
+    SourceAnnotationType,
+    SourceLocation
+} from 'decompiler';
 import { FunctionModel } from 'types';
 import { useProject } from '../hooks/useProject';
 
@@ -100,7 +108,7 @@ function addressRangeToTextRange(range: AddressRange, decompilation: Decompilati
         for (let i = startCol; i < endCol && i < lineRange.endColumn; i++) set.add(i);
     };
 
-    for (let addr = range.startAddress; addr <= range.endAddress; addr += 4) {
+    for (let addr = range.startAddress; addr < range.endAddress; addr += 4) {
         const locs = decompilation.getLocationsForAddress(addr);
         locs.forEach(loc => {
             if (loc.startLine != loc.endLine) {
@@ -202,6 +210,7 @@ type CodeLineProps = {
 };
 
 const CodeLine: React.FC<CodeLineProps> = ({ line, decompilation, annotations }) => {
+    const functions = useFunctions();
     return (
         <div style={{ display: 'flex', flexDirection: 'row', width: '100%' }}>
             {annotations.map((annotation, idx) => {
@@ -216,7 +225,14 @@ const CodeLine: React.FC<CodeLineProps> = ({ line, decompilation, annotations })
                         );
                     case SourceAnnotationType.Function:
                         return (
-                            <span key={idx} style={{ color: '#509663' }}>
+                            <span
+                                key={idx}
+                                style={{ color: '#509663', cursor: 'pointer' }}
+                                onDoubleClick={() => {
+                                    const func = functions.getFunctionById(annotation.funcId);
+                                    if (func) Messager.send('gotoAddress', func.address);
+                                }}
+                            >
                                 {annotation.funcName}
                             </span>
                         );
@@ -239,7 +255,11 @@ const CodeLine: React.FC<CodeLineProps> = ({ line, decompilation, annotations })
                             </span>
                         );
                     case SourceAnnotationType.Comment:
-                        return <span key={idx}>{annotation.content}</span>;
+                        return (
+                            <span key={idx} style={{ color: '#6e6a5e' }}>
+                                {annotation.content}
+                            </span>
+                        );
                     case SourceAnnotationType.Whitespace:
                         if (annotation.length === 0) return null;
                         return <span key={idx}>{'\u00A0'.repeat(annotation.length)}</span>;
@@ -266,18 +286,20 @@ const CodeView: React.FC<DecompilationProps> = ({ decompilation }) => {
         return Messager.on('selectRows', selection => {
             setSelections(addressRangeToTextRange(selection, decompilation));
         });
-    }, [addrRange]);
+    }, [decompilation]);
 
     const fireDisasmSelect = (selection: SourceLocation[]) => {
         // todo: translate selections to addresses to select
         // todo: multi-selection in disassembly
     };
+
     const handleDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
         setSelections([]);
         if (!codeBoxRef.current) return;
         const rect = codeBoxRef.current.getBoundingClientRect();
         setDragStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     };
+
     const handleDragEnd = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!codeBoxRef.current || !dragStart) return;
         const rect = codeBoxRef.current.getBoundingClientRect();
@@ -354,7 +376,7 @@ const CodeView: React.FC<DecompilationProps> = ({ decompilation }) => {
                     display: 'flex',
                     flexDirection: 'column',
                     position: 'relative',
-                    whiteSpace: 'nowrap',
+                    whiteSpace: 'pre',
                     userSelect: 'none'
                 }}
                 onMouseDown={handleDragStart}
@@ -392,7 +414,8 @@ const CodeView: React.FC<DecompilationProps> = ({ decompilation }) => {
                                 height: `${textSizeSampler.height}px`,
                                 position: 'absolute',
                                 top: `${offsetY}px`,
-                                left: `${offsetX}px`
+                                left: `${offsetX}px`,
+                                pointerEvents: 'none'
                             }}
                         />
                     );
@@ -405,6 +428,7 @@ const CodeView: React.FC<DecompilationProps> = ({ decompilation }) => {
 export const DecompilationView: React.FC = () => {
     const project = useProject();
     const functions = useFunctions();
+    const memory = useMemory();
     const [currentFunction, setCurrentFunction] = React.useState<FunctionModel | null>(null);
     const [decompilation, setDecompilation] = React.useState<Decompilation | null>(null);
     const [error, setError] = React.useState<string | null>(null);
@@ -434,15 +458,62 @@ export const DecompilationView: React.FC = () => {
 
             if (func === currentFunction) return;
 
-            const decompilation = await Messager.invoke('decompileFunction', func.id);
-            if ('error' in decompilation) {
-                setCurrentFunction(null);
-                setError(decompilation.error);
-            } else {
+            const bytes = await memory.readBytes(func.address, func.endAddress - func.address);
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const instructions: i.Instruction[] = [];
+
+            for (let i = 0; i < bytes.byteLength; i += 4) {
+                const op = view.getUint32(i, true);
+                try {
+                    const instruction = decode(op, func.address + i);
+                    instructions.push(instruction);
+                } catch (e) {
+                    console.error(
+                        `Failed to decode instruction at 0x${(func.address + i).toString(16).padStart(8, '0')}`,
+                        e
+                    );
+                }
+            }
+
+            try {
+                const decomp = Decompiler.get();
+                const cache = new DecompilerCache(functions.getFunctionById(func.id));
+                const output = decomp
+                    .decompile(instructions, cache, {
+                        findFunctionByAddress: (address: number) => {
+                            const func = functions.getFunctionContainingAddress(address);
+                            if (!func) return null;
+                            return functions.getFunctionById(func.id);
+                        },
+                        findFunctionById: (id: number) => {
+                            return functions.getFunctionById(id);
+                        }
+                    })
+                    .serialize();
+
                 setCurrentFunction(func);
                 setError(null);
-                setDecompilation(new Decompilation(decompilation));
+                setDecompilation(new Decompilation(output));
+            } catch (e) {
+                console.error(`Failed to decompile function ${func.id}`, e);
+                if (e instanceof Error) {
+                    setCurrentFunction(null);
+                    setError(`${e.name}: ${e.message}, ${e.stack}`);
+                } else {
+                    setCurrentFunction(null);
+                    setError(String(e));
+                }
             }
+
+            // const decompilation = await Messager.invoke('decompileFunction', func.id);
+            // if ('error' in decompilation) {
+            //     setCurrentFunction(null);
+            //     setError(decompilation.error);
+            // } else {
+            //     setCurrentFunction(func);
+            //     setError(null);
+            //     setDecompilation(new Decompilation(decompilation));
+            // }
         });
     }, [functions.data.length, currentFunction]);
 

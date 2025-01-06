@@ -10,15 +10,27 @@ type FoundFunction = {
     startAddress: number;
     endAddress: number;
     stackSize: number;
+    branches: {
+        address: number;
+        target: number;
+    }[];
+};
+
+type FoundFunctionCall = {
+    address: number;
+    caller: FunctionEntity;
+    callee: FunctionEntity;
 };
 
 export class FindFunctionAnalyzer {
     private m_functions: FunctionEntity[];
     private m_annotations: AnnotationEntity[];
+    private m_calls: FoundFunctionCall[];
 
     constructor() {
         this.m_functions = [];
         this.m_annotations = [];
+        this.m_calls = [];
     }
 
     public async analyze(progress: (desc: string, frac: number) => void) {
@@ -29,7 +41,7 @@ export class FindFunctionAnalyzer {
             await this.analyzeCodeSection(r, progress);
         }
 
-        return { annotations: this.m_annotations, functions: this.m_functions };
+        return { annotations: this.m_annotations, functions: this.m_functions, calls: this.m_calls };
     }
 
     private async analyzeCodeSection(section: MemoryRegionModel, progress: (desc: string, frac: number) => void) {
@@ -47,7 +59,8 @@ export class FindFunctionAnalyzer {
         let currentFunction: FoundFunction = {
             startAddress: addr,
             endAddress: addr,
-            stackSize: this.analyzeStackFrame(addr)
+            stackSize: this.analyzeStackFrame(addr),
+            branches: []
         };
         const endAddr = addr + section.size;
 
@@ -78,7 +91,16 @@ export class FindFunctionAnalyzer {
 
             if (instruction.isBranch) {
                 lastWasBranch = true;
+
+                // Not technically safe, but we only use it if it's actually an address
                 const target = instruction.operands[instruction.operands.length - 1] as number;
+
+                if (typeof target === 'number') {
+                    currentFunction.branches.push({
+                        address: addr,
+                        target
+                    });
+                }
 
                 if (
                     instruction.code !== Op.Code.jr &&
@@ -172,7 +194,8 @@ export class FindFunctionAnalyzer {
                 currentFunction = {
                     startAddress: addr,
                     endAddress: addr,
-                    stackSize: this.analyzeStackFrame(addr)
+                    stackSize: this.analyzeStackFrame(addr),
+                    branches: []
                 };
 
                 furthestBranch = 0;
@@ -201,6 +224,7 @@ export class FindFunctionAnalyzer {
             found.push(currentFunction);
         }
 
+        const addrFuncMap = new Map<number, FunctionEntity>();
         found.forEach(f => {
             const functionName = `FUN_${f.startAddress.toString(16).padStart(8, '0')}`;
             const annotation = new AnnotationEntity();
@@ -222,6 +246,20 @@ export class FindFunctionAnalyzer {
             func.signatureId = signature.id;
 
             this.m_functions.push(func);
+            addrFuncMap.set(f.startAddress, func);
+        });
+
+        found.forEach(f => {
+            const caller = addrFuncMap.get(f.startAddress);
+            if (!caller) return;
+
+            f.branches.forEach(b => {
+                const callee = addrFuncMap.get(b.target);
+                if (!callee) return;
+
+                const address = b.address;
+                this.m_calls.push({ caller, callee, address });
+            });
         });
     }
 

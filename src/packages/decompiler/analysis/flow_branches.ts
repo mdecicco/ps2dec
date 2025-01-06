@@ -78,8 +78,10 @@ export class SSABranchAnalyzer {
     private findIfPattern(branch: i.Instruction): IfStatement | null {
         const block = this.m_cfg.getBlock(branch.address)!;
         const thenTarget = branch.operands[branch.operands.length - 1] as number;
-        const thenBlock = this.m_cfg.getBlock(thenTarget)!;
-        const elseBlock = block.successors.find(b => b !== thenBlock)!;
+        const thenBlock = this.m_cfg.getBlock(thenTarget);
+        const elseBlock = block.successors.find(b => b !== thenBlock);
+
+        if (!thenBlock || !elseBlock) return null;
 
         // Find where the paths converge using dominance frontier
         const joinBlock = this.findJoinBlock(thenBlock, elseBlock);

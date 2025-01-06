@@ -1,5 +1,6 @@
 import { i, Reg } from 'decoder';
 import { compareLocations, formatVersionedLocation } from 'utils';
+import { Decompiler } from '../decompiler';
 import * as Expr from '../expr';
 import { Func, Method } from '../typesys';
 import { BasicBlock, ControlFlowGraph } from './cfg';
@@ -64,7 +65,32 @@ export class SSAForm {
         // Build SSA form
         this.m_defUse.build(this.m_cfg, this.m_func);
 
-        this.renameVariables(this.m_cfg);
+        this.renameVariables();
+    }
+
+    rebuildExpressions(): void {
+        const entry = this.m_cfg.getEntryBlock();
+        if (!entry) return;
+
+        const processBlock = (block: BasicBlock) => {
+            // Process instructions
+            block.each(instr => instr.toExpression());
+
+            // Process children in dominator tree
+            for (const other of this.m_cfg.getAllBlocks()) {
+                if (this.m_dominators.getImmediateDominator(other) === block) {
+                    processBlock(other);
+                }
+            }
+        };
+
+        const decomp = Decompiler.get();
+        decomp.defsLocked = false;
+
+        // Start from entry block
+        processBlock(entry);
+
+        decomp.defsLocked = true;
     }
 
     private getNextVersion(varKey: string): number {
@@ -77,14 +103,14 @@ export class SSAForm {
         return this.m_versions.get(varKey) || 0;
     }
 
-    private renameVariables(cfg: ControlFlowGraph): void {
-        const entry = cfg.getEntryBlock();
+    private renameVariables(): void {
+        const entry = this.m_cfg.getEntryBlock();
         if (!entry) return;
 
         // Recursively rename variables in a block and its children in dominator tree
         const processBlock = (block: BasicBlock) => {
             // Process instructions
-            for (const instr of block.instructions) {
+            block.each(instr => {
                 // Update uses
                 const uses = this.m_defUse.getInstructionUses(instr);
                 const ssaUses: SSAUse[] = [];
@@ -130,10 +156,10 @@ export class SSAForm {
                     );
                 if (debug) console.log(`  Expression: ${instr.toExpression()}`);
                 else instr.toExpression();
-            }
+            });
 
             // Process children in dominator tree
-            for (const other of cfg.getAllBlocks()) {
+            for (const other of this.m_cfg.getAllBlocks()) {
                 if (this.m_dominators.getImmediateDominator(other) === block) {
                     processBlock(other);
                 }
@@ -155,6 +181,10 @@ export class SSAForm {
                 return typeof use.location !== 'number' && Reg.compare(use.location, location);
             }
         });
+    }
+
+    getUses(instr: i.Instruction): SSAUse[] {
+        return this.m_uses.get(instr) || [];
     }
 
     addDef(instr: i.Instruction, location: Location, value: Expr.Expression): SSADefWithValue {
@@ -283,8 +313,12 @@ export class SSAForm {
         return this.m_defs.get(instr) || [];
     }
 
+    getAllDefsWithValues(instr: i.Instruction): SSADefWithValue[] {
+        return this.m_defsWithValues.get(instr) || [];
+    }
+
     getAllUses(location: Location, version: number): SSAUse[] {
-        const uses: SSAUse[] = [];
+        const result: SSAUse[] = [];
         const seenAddresses = new Set<number>();
 
         for (const [instr, uses] of this.m_uses) {
@@ -293,12 +327,12 @@ export class SSAForm {
                 seenAddresses.add(use.instruction.address);
 
                 if (compareLocations(use.location, location) && use.version === version) {
-                    uses.push(use);
+                    result.push(use);
                 }
             }
         }
 
-        return uses;
+        return result;
     }
 
     getInitialDef(
@@ -456,7 +490,8 @@ export class SSAForm {
         // Search backwards through instructions to find last def
         const seen = new Set<BasicBlock>();
 
-        const worklist = [this.m_cfg.getBlock(atInstr.address)!];
+        const homeBlock = this.m_cfg.getBlock(atInstr.address)!;
+        const worklist = [homeBlock];
 
         while (worklist.length > 0) {
             const block = worklist.pop();
@@ -464,15 +499,18 @@ export class SSAForm {
             seen.add(block);
 
             // Check instructions in reverse
-            for (let i = block.instructions.length - 1; i >= 0; i--) {
-                const instr = block.instructions[i];
-                if (instr.address >= atInstr.address) continue;
+            const def = block.reverseExtract(
+                instr => {
+                    if (instr === atInstr) return;
+                    const def = this.getDef(instr, location);
+                    if (def && 'value' in def) {
+                        return def.value;
+                    }
+                },
+                homeBlock === block ? atInstr : undefined
+            );
 
-                const def = this.getDef(instr, location);
-                if (def && 'value' in def) {
-                    return def.value;
-                }
-            }
+            if (def) return def;
 
             // Move to predecessors
             const preds = block.predecessors.filter(p => !seen.has(p));
@@ -494,23 +532,26 @@ export class SSAForm {
         // Get the most recent definition of the location before this instruction
 
         // Search backwards through instructions to find last def
-        let currentBlock = this.m_cfg.getBlock(atInstr.address)!;
+        const homeBlock = this.m_cfg.getBlock(atInstr.address)!;
+        let currentBlock = homeBlock;
         const seen = new Set<BasicBlock>();
 
         while (currentBlock) {
             seen.add(currentBlock);
 
             // Check instructions in reverse
-            for (let i = currentBlock.instructions.length - 1; i >= 0; i--) {
-                const instr = currentBlock.instructions[i];
-                if (instr.address > atInstr.address) continue;
-                if (excludeSelf && instr.address === atInstr.address) continue;
+            const def = currentBlock.reverseExtract(
+                instr => {
+                    if (excludeSelf && instr === atInstr) return;
+                    const def = this.getDef(instr, location, false);
+                    if (def) {
+                        return def;
+                    }
+                },
+                homeBlock === currentBlock ? atInstr : undefined
+            );
 
-                const def = this.getDef(instr, location, false);
-                if (def) {
-                    return def;
-                }
-            }
+            if (def) return def;
 
             // Move to predecessors
             const pred = currentBlock.predecessors.find(p => !seen.has(p));

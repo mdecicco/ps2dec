@@ -370,6 +370,7 @@ export class FunctionSignatureType extends DataType {
     protected m_returnTypeId: number;
     protected m_callConf!: CallConfig;
     protected m_arguments!: ArgumentInfo[];
+    protected m_isVariadic: boolean;
 
     protected initCallConf(returnType: DataType, argumentTypes: DataType[], thisType?: DataType) {
         this.m_callConf = getCallConfig(CallConv.CDecl, returnType, argumentTypes, thisType);
@@ -382,9 +383,10 @@ export class FunctionSignatureType extends DataType {
         });
     }
 
-    constructor(id: number, returnType: DataType, argumentTypes: DataType[]) {
+    constructor(id: number, returnType: DataType, argumentTypes: DataType[], isVariadic?: boolean) {
         super(id);
         this.m_returnTypeId = returnType.id;
+        this.m_isVariadic = isVariadic || false;
 
         this.setSize(4);
         this.name = FunctionSignatureType.generateName(returnType, argumentTypes);
@@ -413,6 +415,10 @@ export class FunctionSignatureType extends DataType {
         return this.m_callConf;
     }
 
+    get isVariadic() {
+        return this.m_isVariadic;
+    }
+
     getArgType(idx: number) {
         if (idx >= this.m_arguments.length) {
             throw new Error(`Argument index ${idx} out of range`);
@@ -435,30 +441,31 @@ export class FunctionSignatureType extends DataType {
         thisTypeId: number | null,
         argumentTypeIds: number[],
         conf: CallConfig,
-        name: string
+        name: string,
+        isVariadic: boolean
     ) {
         const ts = TypeSystem.get();
         const voidT = ts.getType('void');
 
         if (thisTypeId) {
-            const tp = new MethodSignatureType(id, voidT, voidT, []);
+            const tp = new MethodSignatureType(id, voidT, voidT, [], isVariadic);
             tp.name = name;
             tp.m_returnTypeId = returnTypeId;
             (tp as any).m_thisTypeId = thisTypeId;
             tp.m_callConf = conf;
-            tp.m_arguments = argumentTypeIds.map(id => ({
-                location: conf.argumentLocations[0],
+            tp.m_arguments = argumentTypeIds.map((id, idx) => ({
+                location: conf.argumentLocations[idx],
                 typeId: id
             }));
             return tp;
         }
 
-        const tp = new FunctionSignatureType(id, voidT, []);
+        const tp = new FunctionSignatureType(id, voidT, [], isVariadic);
         tp.name = name;
         tp.m_returnTypeId = returnTypeId;
         tp.m_callConf = conf;
-        tp.m_arguments = argumentTypeIds.map(id => ({
-            location: conf.argumentLocations[0],
+        tp.m_arguments = argumentTypeIds.map((id, idx) => ({
+            location: conf.argumentLocations[idx],
             typeId: id
         }));
         return tp;
@@ -468,8 +475,8 @@ export class FunctionSignatureType extends DataType {
 export class MethodSignatureType extends FunctionSignatureType {
     private m_thisTypeId: number;
 
-    constructor(id: number, methodOf: DataType, returnType: DataType, argumentTypes: DataType[]) {
-        super(id, returnType, argumentTypes);
+    constructor(id: number, methodOf: DataType, returnType: DataType, argumentTypes: DataType[], isVariadic?: boolean) {
+        super(id, returnType, argumentTypes, isVariadic);
 
         this.m_thisTypeId = TypeSystem.get().getPointerType(methodOf.id).id;
 

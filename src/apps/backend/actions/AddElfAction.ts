@@ -5,8 +5,10 @@ import { i } from 'decoder';
 import { Elf } from 'utils';
 
 import { Action, ActionData } from 'apps/backend/actions/Action';
+import { FindFunctionSignatureAnalyzer } from 'apps/backend/actions/analysis/DetermineFunctionSignatures';
 import { FindFunctionAnalyzer } from 'apps/backend/actions/analysis/FindFunctions';
-import { AnnotationEntity, FunctionEntity, MemoryRegionEntity } from 'apps/backend/entities';
+import { AnnotationEntity, FunctionCallEntity, FunctionEntity, MemoryRegionEntity } from 'apps/backend/entities';
+import { FunctionService } from 'apps/backend/services/FunctionService';
 import { MemoryService } from 'apps/backend/services/MemoryService';
 import { AnnotationModel } from 'packages/types/models';
 
@@ -176,15 +178,14 @@ export class AddElfAction extends Action {
         const result = await analyzer.analyze(this.dispatch.bind(this, 'progress'));
         const annotations = result.annotations;
         const functions = result.functions;
-
-        await this.addAnnotations(annotations, annotationRepo);
+        const calls = result.calls;
 
         const functionRepo = this.database.getRepository(FunctionEntity);
         if (functions.length === 0) return;
 
-        const desc = `Saving ${functions.length} functions`;
         let startAt = performance.now();
         for (let i = 0; i < functions.length; i += 120) {
+            const desc = `Saving functions (${i} / ${functions.length})`;
             const current = performance.now();
             const elapsed = current - startAt;
             if (elapsed > ProgressInterval) {
@@ -192,6 +193,61 @@ export class AddElfAction extends Action {
                 startAt = current;
             }
             await functionRepo.insert(functions.slice(i, i + 120));
+        }
+
+        const funcAnnotations: AnnotationEntity[] = [];
+        functions.forEach(f => {
+            const annotation = new AnnotationEntity();
+            annotation.address = f.address;
+            annotation.data = {
+                type: 'function',
+                address: f.address,
+                functionId: f.id,
+                functionAddress: f.address
+            } as AnnotationModel;
+            funcAnnotations.push(annotation);
+        });
+
+        await this.addAnnotations(funcAnnotations.concat(annotations), annotationRepo);
+
+        // Now that they're inserted we have the IDs
+        const callModels: FunctionCallEntity[] = [];
+        for (let i = 0; i < calls.length; i++) {
+            const call = new FunctionCallEntity();
+            call.address = calls[i].address;
+            call.calleeFunctionId = calls[i].callee.id;
+            call.callerFunctionId = calls[i].caller.id;
+            callModels.push(call);
+        }
+
+        const callRepo = this.database.getRepository(FunctionCallEntity);
+        startAt = performance.now();
+        for (let i = 0; i < callModels.length; i += 300) {
+            const desc = `Saving function calls (${i} / ${callModels.length})`;
+            const current = performance.now();
+            const elapsed = current - startAt;
+            if (elapsed > ProgressInterval) {
+                this.dispatch('progress', desc, i / callModels.length);
+                startAt = current;
+            }
+            await callRepo.insert(callModels.slice(i, i + 300));
+        }
+
+        await FunctionService.refetch();
+    }
+
+    protected async determineFunctionSignatures(): Promise<void> {
+        const analyzer = new FindFunctionSignatureAnalyzer(this.dispatch.bind(this, 'progress'));
+        const updates = await analyzer.analyze();
+
+        const functionRepo = this.database.getRepository(FunctionEntity);
+        for (const update of updates) {
+            for (let i = 0; i < update.funcIds.length; i += 990) {
+                await functionRepo.update(
+                    { id: In(update.funcIds.slice(i, i + 990)) },
+                    { signatureId: update.signatureId }
+                );
+            }
         }
     }
 
@@ -204,6 +260,7 @@ export class AddElfAction extends Action {
         }
 
         const regions = await this.addRegions(elf, repo, annotationRepo);
+        this.m_addedRegionIds = regions.map(r => r.id);
 
         await MemoryService.initialize(this.database);
 
@@ -211,18 +268,20 @@ export class AddElfAction extends Action {
 
         await this.findFunctions(annotationRepo);
 
-        this.m_addedRegionIds = regions.map(r => r.id);
+        await this.determineFunctionSignatures();
     }
 
     protected async rollback(): Promise<void> {
         if (this.m_addedRegionIds.length === 0) return;
         const repo = this.database.getRepository(MemoryRegionEntity);
         const annotationRepo = this.database.getRepository(AnnotationEntity);
+        const functionCallRepo = this.database.getRepository(FunctionCallEntity);
         const functionRepo = this.database.getRepository(FunctionEntity);
         await repo.delete({
             id: In(this.m_addedRegionIds)
         });
         await annotationRepo.clear();
+        await functionCallRepo.clear();
         await functionRepo.clear();
     }
 

@@ -25,7 +25,7 @@ export const DisassemblyView: React.FC = () => {
     React.useEffect(() => {
         if (totalRows > 0 && !didGo) {
             setDidGo(true);
-            Messager.send('gotoAddress', 0x001014b8);
+            Messager.send('gotoAddress', 0x00101480);
         }
     }, [totalRows, didGo]);
 
@@ -181,13 +181,18 @@ export const DisassemblyView: React.FC = () => {
                                     key={idx + startRow}
                                     sx={{
                                         fontFamily: 'Courier New',
-                                        color: 'white'
+                                        color: 'white',
+                                        whiteSpace: 'pre'
                                     }}
                                 >
                                     {row.segments.map((s, sidx) => (
                                         <span
                                             key={idx + startRow + sidx}
-                                            style={{ display: 'inline-block', ...s.style }}
+                                            style={{
+                                                display: 'inline-block',
+                                                cursor: s.clickAction ? 'pointer' : 'default',
+                                                ...s.style
+                                            }}
                                             onDoubleClick={
                                                 s.clickAction ? () => clickAction(s.clickAction!) : undefined
                                             }

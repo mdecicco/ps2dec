@@ -26,6 +26,11 @@ export class LocationSet {
     }
 
     get size() {
+        if (this.m_cacheInvalid) {
+            this.m_cachedValues = this.m_map.entries.map(e => e[0]);
+            this.m_cacheInvalid = false;
+        }
+
         return this.m_cachedValues.length;
     }
 

@@ -79,6 +79,7 @@ export class DataTypeService {
     private static m_bitfieldFieldRepo: Repository<BitfieldFieldEntity>;
     private static m_bitfieldTypeRepo: Repository<BitfieldTypeEntity>;
     private static m_dataTypesById: Map<number, DataTypeEntity>;
+    private static m_waitingFor: Map<number, Promise<DataTypeEntity>>;
     private static m_vTablesById: Map<number, VTableEntity>;
     private static m_tsTypeMap: Map<number, DataType>;
     private static m_tsVTableMap: Map<number, VTable>;
@@ -102,18 +103,19 @@ export class DataTypeService {
         DataTypeService.m_bitfieldFieldRepo = db.getRepository(BitfieldFieldEntity);
         DataTypeService.m_bitfieldTypeRepo = db.getRepository(BitfieldTypeEntity);
         DataTypeService.m_dataTypesById = new Map<number, DataTypeEntity>();
+        DataTypeService.m_waitingFor = new Map<number, Promise<DataTypeEntity>>();
         DataTypeService.m_vTablesById = new Map<number, VTableEntity>();
         DataTypeService.m_tsTypeMap = new Map<number, DataType>();
         DataTypeService.m_tsVTableMap = new Map<number, VTable>();
 
-        const types = await this.m_repo.find({
+        const types = await DataTypeService.m_repo.find({
             order: { id: 'ASC' }
         });
         for (const tp of types) {
             DataTypeService.m_dataTypesById.set(tp.id, tp);
         }
 
-        const vTables = await this.m_vTableRepo.find({ order: { id: 'ASC' } });
+        const vTables = await DataTypeService.m_vTableRepo.find({ order: { id: 'ASC' } });
         for (const vt of vTables) {
             DataTypeService.m_vTablesById.set(vt.id, vt);
             DataTypeService.m_tsVTableMap.set(vt.id, DataTypeService.toTypeSystem(vt));
@@ -143,7 +145,15 @@ export class DataTypeService {
             ts.addType(tsType);
         }
 
-        ts.addListener('type-added', DataTypeService.onTypeAdded);
+        ts.addListener('type-added', type => {
+            const add = async () => {
+                const result = await DataTypeService.onTypeAdded(type);
+                DataTypeService.m_waitingFor.delete(type.id);
+                return result;
+            };
+
+            DataTypeService.m_waitingFor.set(type.id, add());
+        });
     }
 
     public static async addDataType(dataType: DataTypeEntity) {
@@ -171,6 +181,16 @@ export class DataTypeService {
         return DataTypeService.m_dataTypesById.get(id);
     }
 
+    public static waitFor(id: number): Promise<DataTypeEntity | null> {
+        const existing = DataTypeService.m_dataTypesById.get(id);
+        if (existing) return Promise.resolve(existing);
+
+        const promise = DataTypeService.m_waitingFor.get(id);
+        if (promise) return promise;
+
+        return Promise.resolve(null);
+    }
+
     public static get dataTypes() {
         return Array.from(DataTypeService.m_dataTypesById.values());
     }
@@ -181,7 +201,7 @@ export class DataTypeService {
 
     private static async onTypeAdded(type: DataType) {
         const existing = await DataTypeService.m_repo.findOne({ where: { id: type.id } });
-        if (existing) return;
+        if (existing) return existing;
 
         await DataTypeService.m_database.transaction(async () => {
             const entity = new DataTypeEntity();
@@ -225,6 +245,8 @@ export class DataTypeService {
 
             DataTypeService.m_tsTypeMap.set(type.id, type);
         });
+
+        return (await DataTypeService.m_repo.findOne({ where: { id: type.id } }))!;
     }
 
     private static async createPrimitive(type: PrimitiveType) {
@@ -362,6 +384,8 @@ export class DataTypeService {
         funcSig.thisTypeId = null;
         // funcSig.thisType = null;
         funcSig.callConfig = type.callConfig;
+        funcSig.arguments = [];
+        funcSig.isVariadic = type.isVariadic;
         await DataTypeService.m_functionSignatureRepo.save(funcSig);
 
         let idx = 0;
@@ -385,6 +409,7 @@ export class DataTypeService {
         funcSig.thisTypeId = type.thisType.id;
         // funcSig.thisType = DataTypeService.m_dataTypesById.get(type.thisType.id)!;
         funcSig.callConfig = type.callConfig;
+        funcSig.isVariadic = type.isVariadic;
         await DataTypeService.m_functionSignatureRepo.save(funcSig);
 
         let idx = 0;
@@ -533,7 +558,8 @@ export class DataTypeService {
                         funcSig.thisTypeId,
                         funcSig.arguments.map(a => a.typeId),
                         funcSig.callConfig,
-                        ent.name
+                        ent.name,
+                        funcSig.isVariadic
                     );
                 case 'enum':
                     const enumType = ent.enum!;

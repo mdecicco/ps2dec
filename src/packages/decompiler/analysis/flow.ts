@@ -147,7 +147,6 @@ export class SSAControlFlowAnalyzer {
         const stmts: nodes.StatementNode[] = [];
 
         const allowedBranches = new Set([Op.Code.b, Op.Code.jal, Op.Code.jalr, Op.Code.j, Op.Code.jr]);
-        const skipIndices = new Set<number>();
 
         const handleInstr = (instr: i.Instruction) => {
             if (instr.isBranch && !allowedBranches.has(instr.code)) return;
@@ -155,7 +154,7 @@ export class SSAControlFlowAnalyzer {
             if (decomp.isAddressIgnored(instr.address)) return;
 
             // If this is the step instruction for any loop we're in, skip it
-            if (this.m_astLoopStack.some(loop => loop.inductionVar!.stepInstruction === instr)) return;
+            if (this.m_astLoopStack.some(loop => loop.inductionVar?.stepInstruction === instr)) return;
 
             if (instr.code === Op.Code.jr && Reg.compare(instr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })) {
                 let retString = 'return';
@@ -229,12 +228,10 @@ export class SSAControlFlowAnalyzer {
         };
 
         for (let i = 0; i < instructions.length; i++) {
-            if (skipIndices.has(i)) continue;
-
             const instr = instructions[i];
             if (instr.isBranch && !instr.isLikelyBranch) {
-                skipIndices.add(i + 1);
                 handleInstr(instructions[i + 1]);
+                i++;
             }
 
             handleInstr(instr);
@@ -264,10 +261,6 @@ export class SSAControlFlowAnalyzer {
             condition = condition.condition;
         }
 
-        // get expression that corresponds to induction variable initialization
-        const initInstr = loop.inductionVar!.initInstruction;
-        const stepInstr = loop.inductionVar!.stepInstruction;
-
         const condExpr = this.m_builder.createExpression(loop.condition!.instruction, false, () => {
             let expr = loop.condition!.instruction.toExpression();
             if (expr instanceof Expr.ConditionalBranch) {
@@ -280,6 +273,10 @@ export class SSAControlFlowAnalyzer {
 
         switch (loop.type) {
             case LoopType.For: {
+                // get expression that corresponds to induction variable initialization
+                const initInstr = loop.inductionVar!.initInstruction;
+                const stepInstr = loop.inductionVar!.stepInstruction;
+
                 const init = this.m_builder.createStatement(
                     this.m_builder.createExpression(initInstr, false, () => {
                         const gen = initInstr.toExpression();
@@ -326,8 +323,8 @@ export class SSAControlFlowAnalyzer {
         const thenBlocks = new Set(Array.from(remainingBlocks).filter(b => branch.thenBlocks.has(b)));
         const elseBlocks = new Set(Array.from(remainingBlocks).filter(b => branch.elseBlocks.has(b)));
 
-        const thenBody = thenBlocks.size > 0 ? this.processBlocks(thenBlocks, branch) : undefined;
-        const elseBody = elseBlocks.size > 0 ? this.processBlocks(elseBlocks, branch) : undefined;
+        let thenBody = thenBlocks.size > 0 ? this.processBlocks(thenBlocks, branch) : undefined;
+        let elseBody = elseBlocks.size > 0 ? this.processBlocks(elseBlocks, branch) : undefined;
 
         // Get condition expression
         let condition = branch.condition.toExpression().reduce();
@@ -672,6 +669,7 @@ export class SSAControlFlowAnalyzer {
 
         if (expr instanceof Expr.Null) return;
         code.pushAddress(ast.instruction.address);
+        // console.log(expr.toString(), expr);
         code.expression(expr);
         code.punctuation(';');
         code.popAddress();
@@ -752,6 +750,14 @@ export class SSAControlFlowAnalyzer {
                                 } else if (!type.isFloatingPoint && expr.rhs.value === 1n) {
                                     code.variable(ivar);
                                     code.punctuation('++');
+                                    didMinify = true;
+                                } else if (type.isFloatingPoint && expr.rhs.toF32() === -1.0) {
+                                    code.variable(ivar);
+                                    code.punctuation('--');
+                                    didMinify = true;
+                                } else if (!type.isFloatingPoint && expr.rhs.value === -1n) {
+                                    code.variable(ivar);
+                                    code.punctuation('--');
                                     didMinify = true;
                                 }
                             }

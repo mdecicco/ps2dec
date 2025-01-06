@@ -1,5 +1,5 @@
 import { FunctionModel } from 'packages/types/models/function';
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryColumn, PrimaryGeneratedColumn } from 'typeorm';
 import { DataTypeEntity, FunctionSignatureEntity, StructureTypeEntity, VTableMethodEntity } from './datatype';
 
 @Entity('tblFunction')
@@ -53,6 +53,12 @@ export class FunctionEntity {
     @JoinColumn({ name: 'signatureId' })
     signatureBase!: DataTypeEntity;
 
+    @OneToMany(() => FunctionCallEntity, call => call.calleeFunctionId, { lazy: true })
+    calledBy!: Promise<FunctionCallEntity[]>;
+
+    @OneToMany(() => FunctionCallEntity, call => call.callerFunctionId, { lazy: true })
+    callsTo!: Promise<FunctionCallEntity[]>;
+
     toModel(): FunctionModel {
         return {
             id: this.id,
@@ -70,4 +76,24 @@ export class FunctionEntity {
             isDeleted: this.isDeleted
         };
     }
+}
+
+@Entity('tblFunctionCall')
+export class FunctionCallEntity {
+    @PrimaryColumn('int')
+    address!: number;
+
+    @Column('int')
+    callerFunctionId!: number;
+
+    @ManyToOne(() => FunctionEntity, func => func.id, { lazy: true })
+    @JoinColumn({ name: 'callerFunctionId' })
+    callerFunction!: Promise<FunctionEntity>;
+
+    @Column('int')
+    calleeFunctionId!: number;
+
+    @ManyToOne(() => FunctionEntity, func => func.id, { lazy: true })
+    @JoinColumn({ name: 'calleeFunctionId' })
+    calleeFunction!: Promise<FunctionEntity>;
 }

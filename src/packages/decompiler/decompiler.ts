@@ -158,7 +158,7 @@ export class Decompiler {
             { type: Reg.Type.EE, id: Reg.EE.PC },
             Expr.Imm.u32(instructions[0].address)
         );
-        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.SP }, new Expr.RawString(`in_sp`));
+        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.SP }, new Expr.StackPointer());
         this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.RA }, new Expr.RawString(`in_ra`));
         this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.ZERO }, Expr.Imm.i128(0));
         this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.COP2_VI, id: Reg.COP2.Integer.VI0 }, Expr.Imm.i32(0));
@@ -204,20 +204,24 @@ export class Decompiler {
     }
 
     analyzeStack(code: i.Instruction[], cache: DecompilerCache) {
-        if (code.length === 0) return [];
-        if (code[0].code !== Op.Code.addiu) return code;
+        if (code.length === 0) return;
 
         const sp: Reg.Register = { type: Reg.Type.EE, id: Reg.EE.SP };
 
-        if (
-            !Reg.compare(code[0].writes[0], sp) ||
-            !Reg.compare(code[0].reads[0], sp) ||
-            typeof code[0].operands[2] !== 'number'
-        ) {
-            cache.stackSize = 0;
-            cache.backedUpRegisters = [];
-            return code;
+        let stackAdjustIdx = -1;
+        for (let i = 0; i < code.length; i++) {
+            const op = code[i];
+            if (op.code !== Op.Code.addiu) continue;
+
+            if (Reg.compare(op.writes[0], sp) && Reg.compare(op.reads[0], sp) && typeof op.operands[2] === 'number') {
+                stackAdjustIdx = i;
+                cache.stackSize = -op.operands[2];
+                cache.backedUpRegisters = [];
+                break;
+            }
         }
+
+        if (stackAdjustIdx === -1) return;
 
         cache.stackSize = -code[0].operands[2] as number;
         this.m_ignoredAddresses.add(code[0].address);
@@ -225,7 +229,7 @@ export class Decompiler {
         const writtenRegs = new Set<string>();
 
         // Determine stack size, backed up registers, remove register backup/restore instructions
-        for (let idx = 1; idx < code.length; idx++) {
+        for (let idx = stackAdjustIdx; idx < code.length; idx++) {
             const op = code[idx];
 
             if (op.code === Op.Code.sq) {
@@ -273,13 +277,17 @@ export class Decompiler {
     }
 
     decompile(code: i.Instruction[], cache: DecompilerCache, funcDb: IFunctionDatabase) {
+        this.defsLocked = false;
         this.m_cache = cache;
         this.m_funcDb = funcDb;
         this.reset(code, cache.func);
 
         this.initialize(code, cache.func);
+        this.analyzeStack(code, cache);
 
         this.m_ssaForm.process();
+        this.defsLocked = true;
+
         this.m_flowAnalyzer.analyze();
 
         const ast = this.m_flowAnalyzer.buildAST();

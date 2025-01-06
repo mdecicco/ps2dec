@@ -57,7 +57,8 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
             ['undefined', 1, false, false],
             ['undefined2', 2, false, false],
             ['undefined4', 4, false, false],
-            ['undefined8', 8, false, false]
+            ['undefined8', 8, false, false],
+            ['undefined16', 16, false, false]
         ];
 
         for (const [name, size, isSigned, isFloatingPoint] of primitives) {
@@ -72,9 +73,14 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
     }
 
     addType(type: DataType) {
+        if (this.m_types.has(type.id)) {
+            throw new Error(`Type ID ${type.id} already exists`);
+        }
         if (this.m_typesByName.has(type.name)) {
             throw new Error(`Type '${type.name}' already exists`);
         }
+
+        this.m_nextTypeId = Math.max(this.m_nextTypeId, type.id + 1);
 
         this.m_types.set(type.id, type);
         this.m_typesByName.set(type.name, type.id);
@@ -209,19 +215,25 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
         return type;
     }
 
-    getSignatureType(returnType: DataType, argumentTypes: DataType[]): FunctionSignatureType;
-    getSignatureType(returnType: DataType, argumentTypes: DataType[], thisType: StructureType): MethodSignatureType;
+    getSignatureType(returnType: DataType, argumentTypes: DataType[], isVariadic?: boolean): FunctionSignatureType;
     getSignatureType(
         returnType: DataType,
         argumentTypes: DataType[],
-        thisType?: DataType
+        thisType: StructureType,
+        isVariadic?: boolean
+    ): MethodSignatureType;
+    getSignatureType(
+        returnType: DataType,
+        argumentTypes: DataType[],
+        thisType?: DataType | boolean,
+        isVariadic?: boolean
     ): FunctionSignatureType | MethodSignatureType {
-        if (thisType) {
+        if (thisType && typeof thisType !== 'boolean') {
             const name = MethodSignatureType.generateName(returnType, argumentTypes, thisType);
             const existing = this.m_typesByName.get(name);
             if (existing) return this.getType(existing) as MethodSignatureType;
 
-            const sig = new MethodSignatureType(this.m_nextTypeId++, thisType, returnType, argumentTypes);
+            const sig = new MethodSignatureType(this.m_nextTypeId++, thisType, returnType, argumentTypes, isVariadic);
             this.addType(sig);
             return sig;
         }
@@ -230,7 +242,7 @@ export class TypeSystem extends EventProducer<TypeSystemEvents> {
         const existing = this.m_typesByName.get(name);
         if (existing) return this.getType(existing) as FunctionSignatureType;
 
-        const sig = new FunctionSignatureType(this.m_nextTypeId++, returnType, argumentTypes);
+        const sig = new FunctionSignatureType(this.m_nextTypeId++, returnType, argumentTypes, isVariadic);
         this.addType(sig);
         return sig;
     }

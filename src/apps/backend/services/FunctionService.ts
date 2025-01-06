@@ -1,18 +1,24 @@
-import { FunctionEntity } from 'apps/backend/entities';
+import { FunctionCallEntity, FunctionEntity } from 'apps/backend/entities';
 import Messager from 'apps/backend/message';
 import { Func, FunctionSignatureType, Method, MethodSignatureType, TypeSystem } from 'decompiler';
 import { DataSource, Repository } from 'typeorm';
 
 export class FunctionService {
     private static m_repo: Repository<FunctionEntity>;
+    private static m_callRepo: Repository<FunctionCallEntity>;
     private static m_functionsById: Map<number, FunctionEntity>;
     private static m_functionsByAddress: Map<number, FunctionEntity>;
+    private static m_functionCallsByCalleeId: Map<number, FunctionCallEntity[]>;
+    private static m_functionCallsByCallerId: Map<number, FunctionCallEntity[]>;
     private static m_tsMap: Map<number, Func | Method>;
 
     public static async initialize(db: DataSource) {
         FunctionService.m_repo = db.getRepository(FunctionEntity);
+        FunctionService.m_callRepo = db.getRepository(FunctionCallEntity);
         FunctionService.m_functionsById = new Map<number, FunctionEntity>();
         FunctionService.m_functionsByAddress = new Map<number, FunctionEntity>();
+        FunctionService.m_functionCallsByCalleeId = new Map<number, FunctionCallEntity[]>();
+        FunctionService.m_functionCallsByCallerId = new Map<number, FunctionCallEntity[]>();
         FunctionService.m_tsMap = new Map<number, Func | Method>();
 
         const functions = await this.m_repo.find({ relations: { signature: true, methodOf: true } });
@@ -21,8 +27,19 @@ export class FunctionService {
             FunctionService.m_functionsByAddress.set(func.address, func);
         }
 
+        const calls = await this.m_callRepo.find({ relations: { calleeFunction: true, callerFunction: true } });
+        for (const call of calls) {
+            const calleeMap = FunctionService.m_functionCallsByCalleeId.get(call.calleeFunctionId);
+            if (!calleeMap) FunctionService.m_functionCallsByCalleeId.set(call.calleeFunctionId, [call]);
+            else calleeMap.push(call);
+
+            const callerMap = FunctionService.m_functionCallsByCallerId.get(call.callerFunctionId);
+            if (!callerMap) FunctionService.m_functionCallsByCallerId.set(call.callerFunctionId, [call]);
+            else callerMap.push(call);
+        }
+
         Messager.func('getFunctions', () => {
-            return FunctionService.functions;
+            return FunctionService.functions.map(f => f.toModel());
         });
     }
 
@@ -36,13 +53,38 @@ export class FunctionService {
             FunctionService.m_functionsByAddress.set(func.address, func);
         }
 
-        Messager.send('setFunctions', FunctionService.functions);
+        const calls = await this.m_callRepo.find({ relations: { calleeFunction: true, callerFunction: true } });
+        for (const call of calls) {
+            const calleeMap = FunctionService.m_functionCallsByCalleeId.get(call.calleeFunctionId);
+            if (!calleeMap) FunctionService.m_functionCallsByCalleeId.set(call.calleeFunctionId, [call]);
+            else calleeMap.push(call);
+
+            const callerMap = FunctionService.m_functionCallsByCallerId.get(call.callerFunctionId);
+            if (!callerMap) FunctionService.m_functionCallsByCallerId.set(call.callerFunctionId, [call]);
+            else callerMap.push(call);
+        }
+
+        Messager.send(
+            'setFunctions',
+            FunctionService.functions.map(f => f.toModel())
+        );
+    }
+
+    public static async update(id: number, changes: Partial<FunctionEntity>) {
+        const func = FunctionService.m_functionsById.get(id);
+        if (!func) return;
+
+        const previous = func.toModel();
+        Object.assign(func, changes);
+        await FunctionService.m_repo.save(func);
+
+        Messager.send('functionUpdated', { previous, current: func.toModel() });
     }
 
     public static async addFunction(func: FunctionEntity) {
         if (!func.id) {
             await FunctionService.m_repo.save(func);
-            Messager.send('functionAdded', func);
+            Messager.send('functionAdded', func.toModel());
         }
 
         FunctionService.m_functionsById.set(func.id, func);
@@ -61,6 +103,14 @@ export class FunctionService {
 
         FunctionService.m_functionsById.delete(id);
         FunctionService.m_functionsByAddress.delete(func.address);
+    }
+
+    public static getCallsToFunction(calleeId: number) {
+        return FunctionService.m_functionCallsByCalleeId.get(calleeId) || [];
+    }
+
+    public static getCallsFromFunction(callerId: number) {
+        return FunctionService.m_functionCallsByCallerId.get(callerId) || [];
     }
 
     public static getFunctionById(id: number) {

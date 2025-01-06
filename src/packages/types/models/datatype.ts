@@ -88,6 +88,7 @@ export interface FunctionSignatureModel extends DataTypeModel {
     thisTypeId: number | null;
     arguments: FunctionSignatureArgumentModel[];
     callConfig: CallConfig;
+    isVariadic: boolean;
 }
 
 //

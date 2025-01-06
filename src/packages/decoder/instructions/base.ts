@@ -14,6 +14,7 @@ export type InstructionCreationInfo = {
     isLikelyBranch?: boolean;
     isLoad?: boolean;
     isStore?: boolean;
+    memSize?: number;
 };
 
 export abstract class Instruction {
@@ -30,6 +31,7 @@ export abstract class Instruction {
     private m_isUnconditionalBranch: boolean;
     private m_isLoad: boolean;
     private m_isStore: boolean;
+    private m_memSize: number;
     private m_youreWelcome: string;
 
     constructor(info: InstructionCreationInfo) {
@@ -46,6 +48,7 @@ export abstract class Instruction {
         this.m_isUnconditionalBranch = false;
         this.m_isLoad = info.isLoad || false;
         this.m_isStore = info.isStore || false;
+        this.m_memSize = info.memSize || 0;
         this.m_youreWelcome = `0x${info.address.toString(16).padStart(8, '0')}`;
 
         if (this.m_isBranch) {
@@ -91,6 +94,10 @@ export abstract class Instruction {
 
     get isStore(): boolean {
         return this.m_isStore;
+    }
+
+    get memSize(): number {
+        return this.m_memSize;
     }
 
     /**

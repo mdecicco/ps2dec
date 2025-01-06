@@ -307,3 +307,15 @@ export function formatOperand(operand: Operand): string {
 
     return formatRegister(operand);
 }
+
+export function isImmediate(operand: Operand): operand is ImmediateOperand {
+    return typeof operand === 'number';
+}
+
+export function isMemOperand(operand: Operand): operand is MemOperand {
+    return typeof operand !== 'number' && 'base' in operand;
+}
+
+export function isRegister(operand: Operand): operand is Register {
+    return typeof operand !== 'number' && 'type' in operand;
+}

@@ -7,6 +7,7 @@ import {
     DataTypeEntity,
     EnumFieldEntity,
     EnumTypeEntity,
+    FunctionCallEntity,
     FunctionEntity,
     FunctionSignatureArgumentEntity,
     FunctionSignatureEntity,
@@ -48,7 +49,8 @@ export async function createDatabase(path: string) {
             EnumTypeEntity,
             BitfieldFieldEntity,
             BitfieldTypeEntity,
-            FunctionEntity
+            FunctionEntity,
+            FunctionCallEntity
         ],
         synchronize: true
     });

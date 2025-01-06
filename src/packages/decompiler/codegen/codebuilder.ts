@@ -303,10 +303,30 @@ export class CodeBuilder {
     }
 
     comment(comment: string) {
-        this.add({
-            type: SourceAnnotationType.Comment,
-            content: comment
-        });
+        const lines = comment.split('\n');
+        if (lines.length === 1) {
+            this.add({
+                type: SourceAnnotationType.Comment,
+                content: `/* ${comment} */`
+            });
+        } else {
+            this.add({
+                type: SourceAnnotationType.Comment,
+                content: '/*'
+            });
+            lines.forEach(line => {
+                this.newLine();
+                this.add({
+                    type: SourceAnnotationType.Comment,
+                    content: ` * ${line}`
+                });
+            });
+            this.newLine();
+            this.add({
+                type: SourceAnnotationType.Comment,
+                content: ' */'
+            });
+        }
     }
 
     whitespace(length: number) {
@@ -385,14 +405,18 @@ export class CodeBuilder {
     }
 
     serialize(): SerializedDecompilation {
-        const serializeAnnotation = (a: SourceAnnotation) => {
+        const serializeAnnotation = (a: SourceAnnotation): SerializedSourceAnnotation => {
             switch (a.type) {
                 case SourceAnnotationType.Variable:
-                    return { ...a, variable: a.variable.serialize() };
+                    return { type: SourceAnnotationType.Variable, variable: a.variable.serialize() };
                 case SourceAnnotationType.DataType:
-                    return { ...a, dataTypeId: a.dataType.id, dataTypeName: a.dataType.name };
+                    return {
+                        type: SourceAnnotationType.DataType,
+                        dataTypeId: a.dataType.id,
+                        dataTypeName: a.dataType.name
+                    };
                 case SourceAnnotationType.Function:
-                    return { ...a, funcId: a.func.id, funcName: a.func.name };
+                    return { type: SourceAnnotationType.Function, funcId: a.func.id, funcName: a.func.name };
                 default:
                     return a;
             }
@@ -445,6 +469,7 @@ export class CodeBuilder {
         if (startColumn === 1 && newText.trim().length === 0) return;
 
         const lines = newText.split('\n');
+
         lines.forEach((line, idx) => {
             if (idx > 0) this.newLine();
             if (line.length === 0) return;
@@ -504,15 +529,8 @@ export class CodeBuilder {
             case SourceAnnotationType.Keyword:
             case SourceAnnotationType.Literal:
             case SourceAnnotationType.Punctuation:
-                str += annotation.content;
-                break;
             case SourceAnnotationType.Comment:
-                const lines = annotation.content.split('\n');
-                if (lines.length === 1) {
-                    str += `/* ${annotation.content} */`;
-                } else {
-                    str += `/*\n${lines.map(l => ` * ${l}\n`).join('')}*/`;
-                }
+                str += annotation.content;
                 break;
             case SourceAnnotationType.PlainText:
                 str += annotation.content;

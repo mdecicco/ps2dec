@@ -162,7 +162,7 @@ export class PointerTypeEntity {
     @Column('int')
     pointsToId!: number;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id)
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id)
     @JoinColumn({ name: 'pointsToId' })
     pointsTo!: DataTypeEntity;
 
@@ -190,7 +190,7 @@ export class ArrayTypeEntity {
     @Column('int')
     elementTypeId!: number;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id)
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id)
     @JoinColumn({ name: 'elementTypeId' })
     elementType!: DataTypeEntity;
 
@@ -284,7 +284,7 @@ export class StructureFieldEntity {
     @Column('int')
     typeId!: number;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id)
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id)
     @JoinColumn({ name: 'typeId' })
     type!: DataTypeEntity;
 
@@ -314,7 +314,7 @@ export class StructureMethodEntity {
     @Column('int')
     methodId!: number;
 
-    @OneToOne(() => FunctionEntity, func => func.id)
+    @ManyToOne(() => FunctionEntity, func => func.id)
     @JoinColumn({ name: 'methodId' })
     method!: FunctionEntity;
 
@@ -445,7 +445,7 @@ export class FunctionSignatureArgumentEntity {
     @Column('int')
     typeId!: number;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id, { lazy: true })
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id, { lazy: true })
     @JoinColumn({ name: 'typeId' })
     type!: Promise<DataTypeEntity>;
 
@@ -474,14 +474,14 @@ export class FunctionSignatureEntity {
     @Column('int')
     returnTypeId!: number;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id, { lazy: true })
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id, { lazy: true })
     @JoinColumn({ name: 'returnTypeId' })
     returnType!: Promise<DataTypeEntity>;
 
     @Column('int', { nullable: true })
     thisTypeId!: number | null;
 
-    @OneToOne(() => DataTypeEntity, dataType => dataType.id, { nullable: true, lazy: true })
+    @ManyToOne(() => DataTypeEntity, dataType => dataType.id, { nullable: true, lazy: true })
     @JoinColumn({ name: 'thisTypeId' })
     thisType!: Promise<DataTypeEntity | null>;
 
@@ -493,6 +493,9 @@ export class FunctionSignatureEntity {
     })
     callConfig!: CallConfig;
 
+    @Column('boolean')
+    isVariadic!: boolean;
+
     toModel(parent: DataTypeEntity): FunctionSignatureModel {
         return {
             id: this.id,
@@ -503,7 +506,8 @@ export class FunctionSignatureEntity {
             thisTypeId: this.thisTypeId,
             arguments: this.arguments.map(argument => argument.toModel()),
             callConfig: this.callConfig,
-            isDeleted: parent.isDeleted
+            isDeleted: parent.isDeleted,
+            isVariadic: this.isVariadic
         };
     }
 }
@@ -552,7 +556,7 @@ export class EnumTypeEntity {
     @Column('int')
     underlyingTypeId!: number;
 
-    @OneToOne(() => PrimitiveTypeEntity, primitive => primitive.id, { lazy: true })
+    @ManyToOne(() => PrimitiveTypeEntity, primitive => primitive.id, { lazy: true })
     @JoinColumn({ name: 'underlyingTypeId' })
     underlyingType!: Promise<PrimitiveTypeEntity>;
 
@@ -616,7 +620,7 @@ export class BitfieldTypeEntity {
     @Column('int')
     underlyingTypeId!: number;
 
-    @OneToOne(() => PrimitiveTypeEntity, primitive => primitive.id, { lazy: true })
+    @ManyToOne(() => PrimitiveTypeEntity, primitive => primitive.id, { lazy: true })
     @JoinColumn({ name: 'underlyingTypeId' })
     underlyingType!: Promise<PrimitiveTypeEntity>;
 

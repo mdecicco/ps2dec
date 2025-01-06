@@ -37,9 +37,14 @@ export function useMemory() {
         };
     }, []);
 
+    const readBytes = (address: number, count: number) => {
+        return Messager.invoke('readBytes', { address, count });
+    };
+
     return {
         memoryRegions,
         loading,
-        loadElf
+        loadElf,
+        readBytes
     };
 }

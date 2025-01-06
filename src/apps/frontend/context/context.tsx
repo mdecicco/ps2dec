@@ -1,3 +1,5 @@
+import { CircularProgress } from '@mui/material';
+import { CenteredContent } from 'apps/frontend/components';
 import { useProject } from 'apps/frontend/hooks';
 import Messager from 'apps/frontend/message';
 import {
@@ -115,7 +117,8 @@ function processTypeAdded(type: DataTypeModel, funcMap: Map<number, number>, fun
                 type.thisTypeId,
                 type.arguments.map(a => a.typeId),
                 type.callConfig,
-                type.name
+                type.name,
+                type.isVariadic
             )
         );
     } else if (isEnumType(type)) {
@@ -386,7 +389,13 @@ export const AppProvider: React.FC<{ children?: React.ReactNode }> = props => {
                 }
             }}
         >
-            {props.children}
+            {loadedDataTypes && loadedVTables && loadedFunctions ? (
+                props.children
+            ) : (
+                <CenteredContent>
+                    <CircularProgress />
+                </CenteredContent>
+            )}
         </AppContext.Provider>
     );
 };

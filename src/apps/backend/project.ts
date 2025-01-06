@@ -283,9 +283,9 @@ export class ProjectManager {
             }
 
             await MemoryService.initialize(this.m_database);
-            await AnnotationService.initialize(this.m_database);
             await FunctionService.initialize(this.m_database);
             await DataTypeService.initialize(this.m_database);
+            await AnnotationService.initialize(this.m_database);
             await DecompilerService.initialize();
             await MainActionService.onDatabaseOpen(this.m_database, projectPath);
 

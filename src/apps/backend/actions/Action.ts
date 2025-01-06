@@ -80,7 +80,11 @@ export abstract class Action extends EventProducer<ActionEventMap> {
             action.dispatch('executeComplete');
         } catch (error) {
             await action.rollback();
-            action.dispatch('executeFailed', String(error));
+            if (error instanceof Error) {
+                action.dispatch('executeFailed', `${error.name}: ${error.message} @ ${error.stack}`);
+            } else {
+                action.dispatch('executeFailed', String(error));
+            }
         }
 
         action.dispatch('afterExecute');

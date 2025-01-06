@@ -162,7 +162,7 @@ export class MemoryService {
             const region = regions[0];
             if (!region.view) return new Uint8Array(0);
 
-            return new Uint8Array(region.view.buffer, region.start - address, count);
+            return new Uint8Array(region.view.buffer, region.view.byteOffset + (address - region.start), count);
         }
 
         const bytes = new Uint8Array(count);

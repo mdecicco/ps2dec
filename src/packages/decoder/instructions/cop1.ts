@@ -26,7 +26,7 @@ export class abs_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        decomp.setRegister(this.writes[0], new Expr.Abs(decomp.getRegister(this.reads[0])));
+        decomp.setRegister(this.writes[0], new Expr.Abs(decomp.getRegister(this.reads[0]).as('f32')));
 
         const f = Expr.Imm.bool(false);
         decomp.setRegister(this.writes[1], f);
@@ -64,7 +64,10 @@ export class add_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.Add(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.Add(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
 
@@ -106,7 +109,10 @@ export class adda_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.Add(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.Add(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
 
@@ -260,7 +266,10 @@ export class c_eq_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.IsEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.IsEqual(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
         return new Expr.Null();
@@ -320,7 +329,10 @@ export class c_le_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.IsLessOrEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.IsLessOrEqual(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
         return new Expr.Null();
@@ -349,7 +361,10 @@ export class c_lt_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.IsLess(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.IsLess(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
         return new Expr.Null();
@@ -422,7 +437,7 @@ export class cvt_s_w extends Instruction {
         super({
             address,
             code: Op.Code.cvt_s_w,
-            codeStr: 'cvt_s_w',
+            codeStr: 'cvt.s.w',
             machineCode: rawCode,
             operands: [fd, fs],
             reads: [fs],
@@ -449,7 +464,7 @@ export class cvt_w_s extends Instruction {
         super({
             address,
             code: Op.Code.cvt_w_s,
-            codeStr: 'cvt_w_s',
+            codeStr: 'cvt.w.s',
             machineCode: rawCode,
             operands: [fd, fs],
             reads: [fs],
@@ -493,8 +508,8 @@ export class div_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const result = new Expr.Div(fs, ft);
         const zero = Expr.Imm.f32(0);
 
@@ -541,8 +556,8 @@ export class madd_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Add(new Expr.Mul(fs, ft), acc));
@@ -586,8 +601,8 @@ export class madda_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Add(new Expr.Mul(fs, ft), acc));
@@ -626,8 +641,8 @@ export class max_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Max([fs, ft]));
 
@@ -689,8 +704,8 @@ export class min_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Min([fs, ft]));
 
@@ -758,8 +773,8 @@ export class msub_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Sub(acc, new Expr.Mul(fs, ft)));
@@ -803,8 +818,8 @@ export class msuba_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Sub(acc, new Expr.Mul(fs, ft)));
@@ -882,8 +897,8 @@ export class mul_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
         const result = new Expr.Mul(fs, ft);
 
         decomp.setRegister(this.writes[0], result);
@@ -927,8 +942,8 @@ export class mula_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Mul(fs, ft));
 
@@ -965,7 +980,7 @@ export class neg_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Negate(fs));
 
@@ -1006,8 +1021,8 @@ export class rsqrt_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]);
-        const ft = decomp.getRegister(this.reads[1]);
+        const fs = decomp.getRegister(this.reads[0]).as('f32');
+        const ft = decomp.getRegister(this.reads[1]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Div(fs, new Expr.Sqrt(ft)));
 
@@ -1051,7 +1066,7 @@ export class sqrt_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const ft = decomp.getRegister(this.reads[0]);
+        const ft = decomp.getRegister(this.reads[0]).as('f32');
 
         decomp.setRegister(this.writes[0], new Expr.Sqrt(ft));
 
@@ -1095,7 +1110,10 @@ export class sub_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.Sub(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.Sub(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
 
@@ -1137,7 +1155,10 @@ export class suba_s extends Instruction {
 
     protected createExpression(): Expr.Expression {
         const decomp = Decompiler.get();
-        const result = new Expr.Sub(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
+        const result = new Expr.Sub(
+            decomp.getRegister(this.reads[0]).as('f32'),
+            decomp.getRegister(this.reads[1]).as('f32')
+        );
 
         decomp.setRegister(this.writes[0], result);
 

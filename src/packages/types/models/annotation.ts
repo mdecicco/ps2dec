@@ -33,6 +33,7 @@ export interface RegionStartAnnotation extends AnnotationBase {
 
 export interface FunctionAnnotation extends AnnotationBase {
     type: 'function';
+    functionId: number;
     functionAddress: number;
 }
 
