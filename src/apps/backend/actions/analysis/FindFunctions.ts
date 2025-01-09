@@ -143,44 +143,14 @@ export class FindFunctionAnalyzer {
 
             // Handle function end
             if (isEnd) {
-                if (addr === currentFunction.startAddress) {
-                    // Function probably has no body other than return if the delay slot
-                    // looks like the start of another function
-                    const delayInstr = MemoryService.getInstruction(addr + 4);
+                // delay slot
+                addr += 4;
 
-                    if (
-                        delayInstr &&
-                        delayInstr.code === Op.Code.addiu &&
-                        Reg.compare(delayInstr.operands[0] as Reg.Register, { type: Reg.Type.EE, id: Reg.EE.SP }) &&
-                        Reg.compare(delayInstr.operands[1] as Reg.Register, { type: Reg.Type.EE, id: Reg.EE.SP }) &&
-                        (delayInstr.operands[2] as number) < 0
-                    ) {
-                        // Yeah, looks like the function _only_ has `jr $ra`.
-                        // If we /really/ wanted to be thorough we could check if there
-                        // are any instructions to call the delay slot, but that's
-                        // expensive...
-                        currentFunction.endAddress = addr + 4;
-                        addr += 4;
-                    } else {
-                        // delay slot
-                        addr += 4;
+                // + 4 because the function ends after the instruction in the delay slot
+                currentFunction.endAddress = addr + 4;
 
-                        // + 4 because the function ends after the instruction in the delay slot
-                        currentFunction.endAddress = addr + 4;
-
-                        // address after the delay slot (probably nop)
-                        addr += 4;
-                    }
-                } else {
-                    // delay slot
-                    addr += 4;
-
-                    // + 4 because the function ends after the instruction in the delay slot
-                    currentFunction.endAddress = addr + 4;
-
-                    // address after the delay slot (probably nop)
-                    addr += 4;
-                }
+                // address after the delay slot (probably nop)
+                addr += 4;
 
                 if (currentFunction.endAddress > section.start + section.size) {
                     currentFunction.endAddress = section.start + section.size;

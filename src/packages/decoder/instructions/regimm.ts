@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { branchTarget, extractBits, extractSignedBits } from '../utils';
@@ -26,8 +27,8 @@ export class bgez extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -59,8 +60,8 @@ export class bgezal extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
@@ -96,8 +97,8 @@ export class bgezall extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
@@ -133,8 +134,8 @@ export class bgezl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -166,8 +167,8 @@ export class bltz extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -199,8 +200,8 @@ export class bltzal extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
@@ -235,8 +236,8 @@ export class bltzall extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
         const returnAddress = Expr.Imm.u32(this.address + 8);
@@ -271,8 +272,8 @@ export class bltzl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -302,8 +303,8 @@ export class teqi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsEqual(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -330,8 +331,8 @@ export class tgei extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsGreaterOrEqual(
             decomp.getRegister(this.reads[0]),
             Expr.Imm.i32(this.operands[1] as number)
@@ -361,8 +362,8 @@ export class tgeiu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsGreaterOrEqual(
             decomp.getRegister(this.reads[0]),
             Expr.Imm.i32(this.operands[1] as number),
@@ -393,8 +394,8 @@ export class tlti extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -421,8 +422,8 @@ export class tltiu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number), true);
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -449,8 +450,8 @@ export class tnei extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.IsNotEqual(decomp.getRegister(this.reads[0]), Expr.Imm.i32(this.operands[1] as number));
 
         return new Expr.ConditionalExpr(cond, new Expr.RawString(`trap()`));
@@ -477,8 +478,8 @@ export class mtsab extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = new Expr.BitwiseAnd(decomp.getRegister(this.reads[0]), Expr.Imm.u32(0b1111));
         const rhs = Expr.Imm.u32((this.operands[1] as number) & 0b1111);
         const xorResult = new Expr.BitwiseXOr(lhs, rhs);
@@ -486,7 +487,7 @@ export class mtsab extends Instruction {
 
         decomp.setRegister(this.writes[0], byteShift);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -510,8 +511,8 @@ export class mtsah extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = new Expr.BitwiseAnd(decomp.getRegister(this.reads[0]), Expr.Imm.u32(0b111));
         const rhs = Expr.Imm.u32((this.operands[1] as number) & 0b111);
         const xorResult = new Expr.BitwiseXOr(lhs, rhs);
@@ -519,6 +520,6 @@ export class mtsah extends Instruction {
 
         decomp.setRegister(this.writes[0], halfShift);
 
-        return new Expr.Null();
+        return null;
     }
 }

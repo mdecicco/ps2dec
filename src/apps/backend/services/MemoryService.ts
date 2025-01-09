@@ -186,6 +186,9 @@ export class MemoryService {
             bytes.set(new Uint8Array(region.view.buffer, readBegin, bytesToCopy), currentReadAddress - address);
 
             currentReadAddress = memEnd;
+            bytesRemaining -= bytesToCopy;
+
+            if (bytesRemaining <= 0) break;
         }
 
         return bytes;
@@ -270,7 +273,12 @@ export class MemoryService {
     }
 
     private static getRelevantRegionsForRange(startAddress: number, endAddress: number): Region[] {
-        return MemoryService.m_regions.filter(r => r.start <= startAddress && r.end > endAddress);
+        return MemoryService.m_regions.filter(
+            r =>
+                (startAddress <= r.start && endAddress > r.start) || // Region starts within range
+                (startAddress < r.end && endAddress >= r.end) || // Region ends within range
+                (r.start <= startAddress && r.end >= endAddress) // Region contains range
+        );
     }
 
     private static getRelevantSection(address: number): Region | null {

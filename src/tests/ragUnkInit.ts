@@ -52,7 +52,7 @@ export function test() {
 
     const ts = TypeSystem.get();
     ts.initialize();
-    const decompiler = Decompiler.get();
+    const decompiler = Decompiler.current;
 
     const cls = ts.createStructure('ragUnk0');
     cls.addProperty('links', 0, ts.getType('undefined4**'));

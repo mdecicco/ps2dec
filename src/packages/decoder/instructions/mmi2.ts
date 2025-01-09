@@ -1,4 +1,5 @@
-import { Decompiler, Expr, TypeSystem } from 'decompiler';
+import { Decompiler, TypeSystem } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { extractBits } from '../utils';
@@ -25,14 +26,14 @@ export class pand extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
         decomp.setRegister(this.writes[0], new Expr.BitwiseAnd(lhs, rhs, 128));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -57,14 +58,14 @@ export class pcpyld extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const a = new Expr.ShiftLeft(decomp.getRegister(this.reads[0]), Expr.Imm.u64(64), 128);
         const b = new Expr.BitwiseAnd(decomp.getRegister(this.reads[1]), Expr.Imm.u64(0xffffffffffffffffn), 128);
 
         decomp.setRegister(this.writes[0], new Expr.BitwiseOr(a, b, 128));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -91,8 +92,8 @@ export class pdivbw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rs = decomp.getRegister(this.reads[0]);
         const rt = decomp.getRegister(this.reads[1]);
 
@@ -113,7 +114,7 @@ export class pdivbw extends Instruction {
         decomp.setRegister(this.writes[0], new Expr.ConcatBits(Expr.Imm.u32(128), elemWidth, loElems));
         decomp.setRegister(this.writes[1], new Expr.ConcatBits(Expr.Imm.u32(128), elemWidth, hiElems));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -140,8 +141,8 @@ export class pdivw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rs = decomp.getRegister(this.reads[0]);
         const rt = decomp.getRegister(this.reads[1]);
 
@@ -163,7 +164,7 @@ export class pdivw extends Instruction {
         decomp.setRegister(this.writes[0], new Expr.ConcatBits(imm128, imm64, [quotientB, quotientA]));
         decomp.setRegister(this.writes[1], new Expr.ConcatBits(imm128, imm64, [remainderB, remainderA]));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -187,8 +188,8 @@ export class pexeh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rt = decomp.getRegister(this.reads[0]);
 
         const elems: Expr.Expression[] = [];
@@ -210,7 +211,7 @@ export class pexeh extends Instruction {
 
         decomp.setRegister(this.writes[0], new Expr.ConcatBits(Expr.Imm.u32(128), elemWidth, elems));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -234,8 +235,8 @@ export class pexew extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rt = decomp.getRegister(this.reads[0]);
 
         const elems: Expr.Expression[] = [];
@@ -253,7 +254,7 @@ export class pexew extends Instruction {
 
         decomp.setRegister(this.writes[0], new Expr.ConcatBits(Expr.Imm.u32(128), elemWidth, elems));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -278,8 +279,8 @@ export class phmadh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rs = decomp.getRegister(this.reads[0]);
         const rt = decomp.getRegister(this.reads[1]);
         const prevLo = decomp.getRegister(this.writes[1]);
@@ -361,7 +362,7 @@ export class phmadh extends Instruction {
         decomp.setRegister(this.writes[1], new Expr.ConcatBits(totalWidth, elemWidth, loElems));
         decomp.setRegister(this.writes[2], new Expr.ConcatBits(totalWidth, elemWidth, hiElems));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -386,8 +387,8 @@ export class phmsbh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rs = decomp.getRegister(this.reads[0]);
         const rt = decomp.getRegister(this.reads[1]);
         const prevLo = decomp.getRegister(this.writes[1]);
@@ -469,7 +470,7 @@ export class phmsbh extends Instruction {
         decomp.setRegister(this.writes[1], new Expr.ConcatBits(totalWidth, elemWidth, loElems));
         decomp.setRegister(this.writes[2], new Expr.ConcatBits(totalWidth, elemWidth, hiElems));
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -494,8 +495,8 @@ export class pinth extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const rs = decomp.getRegister(this.reads[0]);
         const rt = decomp.getRegister(this.reads[1]);
 
@@ -512,7 +513,7 @@ export class pinth extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -537,7 +538,7 @@ export class pmaddh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmaddh not implemented');
     }
 }
@@ -563,7 +564,7 @@ export class pmaddw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmaddw not implemented');
     }
 }
@@ -587,10 +588,10 @@ export class pmfhi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -613,10 +614,10 @@ export class pmflo extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -641,7 +642,7 @@ export class pmsubh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmsubh not implemented');
     }
 }
@@ -667,7 +668,7 @@ export class pmsubw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmsubw not implemented');
     }
 }
@@ -693,7 +694,7 @@ export class pmulth extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmulth not implemented');
     }
 }
@@ -719,7 +720,7 @@ export class pmultw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pmultw not implemented');
     }
 }
@@ -744,7 +745,7 @@ export class prevh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('prevh not implemented');
     }
 }
@@ -769,7 +770,7 @@ export class prot3w extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('prot3w not implemented');
     }
 }
@@ -795,7 +796,7 @@ export class psllvw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('psllvw not implemented');
     }
 }
@@ -821,7 +822,7 @@ export class psrlvw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('psrlvw not implemented');
     }
 }
@@ -847,7 +848,7 @@ export class pxor extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pxor not implemented');
     }
 }

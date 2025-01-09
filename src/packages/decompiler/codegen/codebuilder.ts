@@ -1,5 +1,6 @@
-import { Location, SSAForm } from '../analysis/ssa';
-import * as Expr from '../expr/base';
+import { DecompVariable } from 'decompiler';
+import { FunctionCode } from 'packages/decompiler/input';
+import { VersionedLocation } from '../common';
 import { DataType, Func, Method, PointerType, TypeProperty } from '../typesys';
 import { SerializedValue, Value } from '../value';
 
@@ -13,7 +14,7 @@ export type SourceLocation = {
 };
 
 export type VariableStorage = {
-    location: Location;
+    location: VersionedLocation;
     startAddress: number;
     endAddress: number;
 };
@@ -32,7 +33,8 @@ export enum SourceAnnotationType {
 
 export type VariableAnnotation = {
     type: SourceAnnotationType.Variable;
-    variable: Value;
+    variable: DecompVariable;
+    storage: VariableStorage;
 };
 
 export type SerializedVariableAnnotation = {
@@ -70,6 +72,7 @@ export type KeywordAnnotation = {
 export type LiteralAnnotation = {
     type: SourceAnnotationType.Literal;
     content: string;
+    value: bigint;
     dataType: DataType;
 };
 
@@ -131,6 +134,16 @@ export type CodeBuilderOptions = {
     maxLineLength: number;
 };
 
+interface IGenerator {
+    generate(code: CodeBuilder): void;
+}
+
+interface IImmediate {
+    type: DataType;
+    value: bigint;
+    toString(): string;
+}
+
 function sourceLocationIntersects(loc: SourceLocation, other: SourceLocation) {
     if (loc.startOffset < other.startOffset && loc.endOffset < other.startOffset) return false;
     if (loc.startOffset > other.endOffset && loc.endOffset > other.endOffset) return false;
@@ -141,7 +154,7 @@ export class CodeBuilder {
     private m_code: string;
     private m_addressLocationMap: Map<number, SourceLocation[]>;
     private m_locationAddressMap: Map<SourceLocation, number[]>;
-    private m_variableStorageMap: Map<Value, VariableStorage[]>;
+    private m_variableStorageMap: Map<DecompVariable, VariableStorage[]>;
     private m_lineAnnotationMap: Map<number, SourceAnnotation[]>;
     private m_lineRanges: Map<number, SourceLocation>;
     private m_annotations: SourceAnnotation[];
@@ -149,10 +162,10 @@ export class CodeBuilder {
     private m_currentLine: number;
     private m_currentColumn: number;
     private m_currentAddressStack: number[];
-    private m_ssa: SSAForm;
+    private m_func: FunctionCode;
     private m_options: CodeBuilderOptions;
 
-    constructor(ssa: SSAForm, options?: Partial<CodeBuilderOptions>) {
+    constructor(func: FunctionCode, options?: Partial<CodeBuilderOptions>) {
         this.m_code = '';
         this.m_addressLocationMap = new Map();
         this.m_locationAddressMap = new Map();
@@ -164,7 +177,7 @@ export class CodeBuilder {
         this.m_currentLine = 1;
         this.m_currentColumn = 1;
         this.m_currentAddressStack = [];
-        this.m_ssa = ssa;
+        this.m_func = func;
         this.m_options = {
             tabWidth: 4,
             maxLineLength: 120,
@@ -189,6 +202,18 @@ export class CodeBuilder {
         return this.m_annotations;
     }
 
+    get lineCount() {
+        return this.m_lineRanges.size;
+    }
+
+    get lineRanges() {
+        return this.m_lineRanges;
+    }
+
+    getLineAnnotations(line: number) {
+        return this.m_lineAnnotationMap.get(line) || [];
+    }
+
     getAddressesForLocation(location: SourceLocation) {
         const addresses: number[] = [];
 
@@ -199,6 +224,10 @@ export class CodeBuilder {
         }
 
         return addresses;
+    }
+
+    getLocationsForAddress(address: number): SourceLocation[] {
+        return this.m_addressLocationMap.get(address) || [];
     }
 
     indent() {
@@ -251,10 +280,43 @@ export class CodeBuilder {
         this.m_currentAddressStack.pop();
     }
 
-    variable(variable: Value) {
+    variable(variable: DecompVariable) {
+        let storage: VariableStorage | null = null;
+
+        const currentAddress = this.m_currentAddressStack[this.m_currentAddressStack.length - 1];
+
+        const locations = variable.versions.entries;
+        for (const [location, versions] of locations) {
+            versions.forEach(version => {
+                const def = this.m_func.getDefOf({ value: location, version });
+                const uses = this.m_func.getUsesOf(def);
+                uses.sort((a, b) => b.instruction.address - a.instruction.address);
+
+                const startAddress = def.instruction?.address || this.m_func.entry.startAddress;
+                const endAddress = uses.length > 0 ? uses[0].instruction.address : startAddress;
+                if (startAddress <= currentAddress && endAddress >= currentAddress) {
+                    storage = {
+                        location: { value: location, version },
+                        startAddress,
+                        endAddress
+                    };
+                }
+            });
+        }
+
+        if (!storage) {
+            console.log(variable.toString());
+            // throw new Error(`Definition of variable ${variable.name} not found at current address ${currentAddress}`);
+        }
+
         this.add({
             type: SourceAnnotationType.Variable,
-            variable
+            variable,
+            storage: storage || {
+                location: { value: locations[0][0], version: locations[0][1][0] },
+                startAddress: 0,
+                endAddress: 0
+            }
         });
     }
 
@@ -279,18 +341,20 @@ export class CodeBuilder {
         });
     }
 
-    literal(literal: string, dataType: DataType) {
+    literal(literal: string, dataType: DataType, value: bigint) {
         this.add({
             type: SourceAnnotationType.Literal,
             content: literal,
+            value,
             dataType
         });
     }
 
-    immediate(value: Expr.Imm) {
+    immediate(value: IImmediate) {
         this.add({
             type: SourceAnnotationType.Literal,
             content: value.toString(),
+            value: value.value,
             dataType: value.type
         });
     }
@@ -344,7 +408,8 @@ export class CodeBuilder {
         });
     }
 
-    expression(expr: Expr.Expression) {
+    expression(expr: IGenerator | null) {
+        if (!expr) return;
         expr.generate(this);
     }
 
@@ -387,7 +452,7 @@ export class CodeBuilder {
         }
         this.func(func);
         this.punctuation('(');
-        func.arguments.forEach((arg, idx) => {
+        this.m_func.arguments.forEach((arg, idx) => {
             if (idx > 0) this.punctuation(', ');
             this.dataType(arg.type);
             this.whitespace(1);
@@ -545,7 +610,7 @@ export class CodeBuilder {
         return str;
     }
 
-    private mapVariableStorage(variable: Value) {
+    private mapVariableStorage(variable: DecompVariable) {
         let storage = this.m_variableStorageMap.get(variable);
         if (storage) {
             // Each variable only needs to be mapped once
@@ -558,15 +623,17 @@ export class CodeBuilder {
         const locations = variable.versions.entries;
         for (const [location, versions] of locations) {
             versions.forEach(version => {
-                const def = this.m_ssa.getVersionDef(location, version);
-
-                const uses = this.m_ssa.getAllUses(location, version);
+                const def = this.m_func.getDefOf({ value: location, version });
+                const uses = this.m_func.getUsesOf(def);
                 uses.sort((a, b) => b.instruction.address - a.instruction.address);
 
+                const startAddress = def.instruction?.address || this.m_func.entry.startAddress;
+                const endAddress = uses.length > 0 ? uses[0].instruction.address : startAddress;
+
                 storage.push({
-                    location,
-                    startAddress: def.instruction.address,
-                    endAddress: uses.length > 0 ? uses[0].instruction.address : def.instruction.address
+                    location: { value: location, version },
+                    startAddress,
+                    endAddress
                 });
             });
         }

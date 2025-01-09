@@ -1,5 +1,6 @@
 import { Reg } from 'decoder';
 import { Location } from 'decompiler';
+import { compareLocations } from 'utils';
 
 type RegisterMap<T> = {
     [Reg.Type.EE]: { [k: number]: T };
@@ -86,7 +87,7 @@ export class LocationMap<T> {
 
         if (prevValue) {
             for (let i = 0; i < this.m_allValues.length; i++) {
-                if (this.m_equalityCheck(this.m_allValues[i], prevValue)) {
+                if (compareLocations(this.m_allEntries[i][0], location)) {
                     this.m_allValues[i] = value;
                     this.m_allEntries[i][1] = value;
                     break;

@@ -1,6 +1,6 @@
 import { Reg } from 'decoder';
 import { EventProducer, LocationMap, LocationSet } from 'utils';
-import { Location } from './analysis/ssa';
+import { Location } from './common';
 import { DataType, TypeSystem } from './typesys';
 
 type ValueLocationReg = {
@@ -28,10 +28,10 @@ export type SerializedValue = {
 };
 
 export class Value extends EventProducer<ValueEvents> {
-    private m_typeId: number;
-    private m_name: string | null;
-    private m_ssaLocations: LocationSet;
-    private m_ssaVersions: LocationMap<number[]>;
+    protected m_typeId: number;
+    protected m_name: string | null;
+    protected m_ssaLocations: LocationSet;
+    protected m_ssaVersions: LocationMap<number[]>;
 
     constructor(type: DataType | number, name?: string | null) {
         super();
@@ -120,7 +120,7 @@ export class Value extends EventProducer<ValueEvents> {
     serialize(): SerializedValue {
         return {
             typeId: this.m_typeId,
-            name: this.m_name,
+            name: this.name,
             ssaLocations: this.m_ssaLocations.values,
             ssaVersions: this.m_ssaVersions.entries
         };

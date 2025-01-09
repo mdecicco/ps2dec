@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { branchTarget, extractBits, extractSignedBits } from '../utils';
@@ -24,14 +25,14 @@ export class abs_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        decomp.setRegister(this.writes[0], new Expr.Abs(decomp.getRegister(this.reads[0]).as('f32')));
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        decomp.setRegister(this.writes[0], new Expr.Abs(Expr.cast(decomp.getRegister(this.reads[0]), 'f32')));
 
         const f = Expr.Imm.bool(false);
         decomp.setRegister(this.writes[1], f);
         decomp.setRegister(this.writes[2], f);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -62,11 +63,11 @@ export class add_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.Add(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
@@ -77,7 +78,7 @@ export class add_s extends Instruction {
         decomp.setRegister(this.writes[2], msg);
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -107,11 +108,11 @@ export class adda_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.Add(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
@@ -122,7 +123,7 @@ export class adda_s extends Instruction {
         decomp.setRegister(this.writes[2], msg);
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -147,8 +148,8 @@ export class bc1f extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.Not(decomp.getRegister(this.reads[0]));
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number);
         return expr;
@@ -177,8 +178,8 @@ export class bc1fl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.Not(decomp.getRegister(this.reads[0]));
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number, true);
         return expr;
@@ -206,8 +207,8 @@ export class bc1t extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = decomp.getRegister(this.reads[0]);
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number);
         return expr;
@@ -236,8 +237,8 @@ export class bc1tl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = decomp.getRegister(this.reads[0]);
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number, true);
         return expr;
@@ -264,15 +265,15 @@ export class c_eq_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.IsEqual(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -296,14 +297,14 @@ export class c_f_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         // const result = new Expr.IsEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
 
         // The docs explicitly say that it sets the flag to false no matter what???
         // What the heck? Why even have this
         decomp.setRegister(this.writes[0], Expr.Imm.bool(false));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -327,15 +328,15 @@ export class c_le_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.IsLessOrEqual(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -359,15 +360,15 @@ export class c_lt_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.IsLess(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -391,10 +392,10 @@ export class cfc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -418,10 +419,10 @@ export class ctc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -445,10 +446,10 @@ export class cvt_s_w extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], new Expr.PrimitiveCast(decomp.getRegister(this.reads[0]), 'f32'));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -472,10 +473,10 @@ export class cvt_w_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], new Expr.PrimitiveCast(decomp.getRegister(this.reads[0]), 'i32'));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -506,10 +507,10 @@ export class div_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const result = new Expr.Div(fs, ft);
         const zero = Expr.Imm.f32(0);
 
@@ -523,7 +524,7 @@ export class div_s extends Instruction {
         decomp.setRegister(this.writes[3], flagI);
         decomp.setRegister(this.writes[4], flagD);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -554,10 +555,10 @@ export class madd_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Add(new Expr.Mul(fs, ft), acc));
@@ -569,7 +570,7 @@ export class madd_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -599,10 +600,10 @@ export class madda_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Add(new Expr.Mul(fs, ft), acc));
@@ -614,7 +615,7 @@ export class madda_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -639,10 +640,10 @@ export class max_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Max([fs, ft]));
 
@@ -650,7 +651,7 @@ export class max_s extends Instruction {
         decomp.setRegister(this.writes[1], f);
         decomp.setRegister(this.writes[2], f);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -674,10 +675,10 @@ export class mfc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -702,10 +703,10 @@ export class min_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Min([fs, ft]));
 
@@ -713,7 +714,7 @@ export class min_s extends Instruction {
         decomp.setRegister(this.writes[1], f);
         decomp.setRegister(this.writes[2], f);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -737,10 +738,10 @@ export class mov_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -771,10 +772,10 @@ export class msub_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Sub(acc, new Expr.Mul(fs, ft)));
@@ -786,7 +787,7 @@ export class msub_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -816,10 +817,10 @@ export class msuba_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const acc = decomp.getRegister(this.reads[2]);
 
         decomp.setRegister(this.writes[0], new Expr.Sub(acc, new Expr.Mul(fs, ft)));
@@ -831,7 +832,7 @@ export class msuba_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -855,8 +856,8 @@ export class mtc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const src = decomp.getRegister(this.reads[0]);
         if (src instanceof Expr.Imm) {
             if (src.type.size === 4) src.type = 'f32';
@@ -864,7 +865,7 @@ export class mtc1 extends Instruction {
             else src.type = 'f32';
         }
         decomp.setRegister(this.writes[0], src);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -895,10 +896,10 @@ export class mul_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
         const result = new Expr.Mul(fs, ft);
 
         decomp.setRegister(this.writes[0], result);
@@ -910,7 +911,7 @@ export class mul_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -940,10 +941,10 @@ export class mula_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Mul(fs, ft));
 
@@ -954,7 +955,7 @@ export class mula_s extends Instruction {
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -978,9 +979,9 @@ export class neg_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Negate(fs));
 
@@ -988,7 +989,7 @@ export class neg_s extends Instruction {
         decomp.setRegister(this.writes[1], f);
         decomp.setRegister(this.writes[2], f);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1019,10 +1020,10 @@ export class rsqrt_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const fs = decomp.getRegister(this.reads[0]).as('f32');
-        const ft = decomp.getRegister(this.reads[1]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const fs = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
+        const ft = Expr.cast(decomp.getRegister(this.reads[1]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Div(fs, new Expr.Sqrt(ft)));
 
@@ -1035,7 +1036,7 @@ export class rsqrt_s extends Instruction {
         decomp.setRegister(this.writes[3], ftIsNegative);
         decomp.setRegister(this.writes[4], ftIsZero);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1064,9 +1065,9 @@ export class sqrt_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const ft = decomp.getRegister(this.reads[0]).as('f32');
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const ft = Expr.cast(decomp.getRegister(this.reads[0]), 'f32');
 
         decomp.setRegister(this.writes[0], new Expr.Sqrt(ft));
 
@@ -1077,7 +1078,7 @@ export class sqrt_s extends Instruction {
         decomp.setRegister(this.writes[2], Expr.Imm.bool(false));
         decomp.setRegister(this.writes[3], ftIsNegative);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1108,11 +1109,11 @@ export class sub_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.Sub(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
@@ -1123,7 +1124,7 @@ export class sub_s extends Instruction {
         decomp.setRegister(this.writes[2], msg);
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1153,11 +1154,11 @@ export class suba_s extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const result = new Expr.Sub(
-            decomp.getRegister(this.reads[0]).as('f32'),
-            decomp.getRegister(this.reads[1]).as('f32')
+            Expr.cast(decomp.getRegister(this.reads[0]), 'f32'),
+            Expr.cast(decomp.getRegister(this.reads[1]), 'f32')
         );
 
         decomp.setRegister(this.writes[0], result);
@@ -1168,6 +1169,6 @@ export class suba_s extends Instruction {
         decomp.setRegister(this.writes[2], msg);
         decomp.setRegister(this.writes[3], msg);
         decomp.setRegister(this.writes[4], msg);
-        return new Expr.Null();
+        return null;
     }
 }

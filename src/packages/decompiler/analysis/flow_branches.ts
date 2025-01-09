@@ -1,7 +1,5 @@
 import { i, Op } from 'decoder';
 import { BasicBlock, ControlFlowGraph } from './cfg';
-import { DominatorInfo } from './dominators';
-import { SSAForm } from './ssa';
 
 export interface IfStatement {
     condition: i.Instruction;
@@ -20,16 +18,12 @@ export interface BranchAnalysisResult {
     chains: BranchChain[];
 }
 
-export class SSABranchAnalyzer {
+export class BranchAnalyzer {
     private m_cfg: ControlFlowGraph;
-    private m_dominators: DominatorInfo;
-    private m_ssa: SSAForm;
     private m_loopBranches: Set<i.Instruction>;
 
-    constructor(cfg: ControlFlowGraph, dominators: DominatorInfo, ssa: SSAForm, loopBranches: i.Instruction[] = []) {
+    constructor(cfg: ControlFlowGraph, loopBranches: i.Instruction[]) {
         this.m_cfg = cfg;
-        this.m_dominators = dominators;
-        this.m_ssa = ssa;
         this.m_loopBranches = new Set(loopBranches);
     }
 
@@ -77,6 +71,12 @@ export class SSABranchAnalyzer {
 
     private findIfPattern(branch: i.Instruction): IfStatement | null {
         const block = this.m_cfg.getBlock(branch.address)!;
+
+        if (!block) {
+            console.log(`Failed to find block for branch ${branch}`);
+            this.m_cfg.debugPrint();
+        }
+
         const thenTarget = branch.operands[branch.operands.length - 1] as number;
         const thenBlock = this.m_cfg.getBlock(thenTarget);
         const elseBlock = block.successors.find(b => b !== thenBlock);

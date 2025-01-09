@@ -1,8 +1,6 @@
 import * as nodes from '../ast/nodes';
+import { FunctionCode } from '../input';
 import { IASTAnalyzerPlugin } from './ast_plugin';
-import { ControlFlowGraph } from './cfg';
-import { SSAForm } from './ssa';
-import { VariableDB } from './vardb';
 import {
     ArrayAccessAnalyzer,
     LoopVariableAnalyzer,
@@ -11,16 +9,16 @@ import {
 } from './variables';
 
 export class ASTAnalyzer {
-    private m_ssa: SSAForm;
+    private m_func: FunctionCode;
     private m_plugins: IASTAnalyzerPlugin[] = [];
 
-    constructor(ssa: SSAForm, vardb: VariableDB, cfg: ControlFlowGraph) {
-        this.m_ssa = ssa;
+    constructor(func: FunctionCode) {
+        this.m_func = func;
         this.m_plugins.push(
-            new LoopVariableAnalyzer(ssa, vardb, cfg),
-            new ArrayAccessAnalyzer(ssa, vardb, cfg),
-            new PhiVariableAnalyzer(ssa, vardb, cfg),
-            new SubExpressionVariableAnalyzer(ssa, vardb, cfg)
+            new LoopVariableAnalyzer(func),
+            new ArrayAccessAnalyzer(func),
+            new PhiVariableAnalyzer(func),
+            new SubExpressionVariableAnalyzer(func)
         );
     }
 
@@ -30,7 +28,7 @@ export class ASTAnalyzer {
             changed = false;
             for (const plugin of this.m_plugins) {
                 if (plugin.analyze(ast)) {
-                    this.m_ssa.rebuildExpressions();
+                    this.m_func.rebuildValues();
                     changed = true;
                 }
             }

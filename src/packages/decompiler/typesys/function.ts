@@ -7,6 +7,7 @@ import { VTableMethod } from './vtable';
 export type FuncRehydrateData = {
     id: number;
     address: number;
+    endAddress: number;
     args: SerializedValue[];
     retLocation: ValueLocation | null;
     signatureId: number;
@@ -25,6 +26,7 @@ export type FuncRehydrateData = {
 export class Func {
     private m_id: number;
     private m_address: number;
+    private m_endAddress: number;
     private m_args: Value[];
     private m_retLocation: ValueLocation | null;
     protected m_signatureId: number;
@@ -33,9 +35,15 @@ export class Func {
     private m_isDestructor: boolean;
     private m_valueListeners: EventListener[];
 
-    constructor(id: number, address: number, signature: FunctionSignatureType | MethodSignatureType) {
+    constructor(
+        id: number,
+        address: number,
+        endAddress: number,
+        signature: FunctionSignatureType | MethodSignatureType
+    ) {
         this.m_id = id;
         this.m_address = address;
+        this.m_endAddress = endAddress;
         this.m_signatureId = signature.id;
         this.m_name = `FUN_${address.toString(16).padStart(8, '0')}`;
         this.m_args = [];
@@ -53,6 +61,10 @@ export class Func {
 
     get address(): number {
         return this.m_address;
+    }
+
+    get endAddress(): number {
+        return this.m_endAddress;
     }
 
     get name(): string {
@@ -183,6 +195,7 @@ export class Func {
     protected setFromRehydrateData(data: FuncRehydrateData) {
         this.m_id = data.id;
         this.m_address = data.address;
+        this.m_endAddress = data.endAddress;
         this.m_retLocation = data.retLocation;
         this.m_signatureId = data.signatureId;
         this.m_name = data.name;
@@ -202,8 +215,14 @@ export class Method extends Func {
     private m_vtbEntry: VTableMethod | null;
     private m_thisValue: Value;
 
-    constructor(id: number, address: number, signature: MethodSignatureType, vtableEntry?: VTableMethod) {
-        super(id, address, signature);
+    constructor(
+        id: number,
+        address: number,
+        endAddress: number,
+        signature: MethodSignatureType,
+        vtableEntry?: VTableMethod
+    ) {
+        super(id, address, endAddress, signature);
 
         this.m_vtbEntry = vtableEntry || null;
         this.m_thisValue = new Value(signature.thisType.id, 'this');

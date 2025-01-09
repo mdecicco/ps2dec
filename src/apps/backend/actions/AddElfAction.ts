@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { In, Repository } from 'typeorm';
 
-import { i } from 'decoder';
+import { decode, i } from 'decoder';
 import { Elf } from 'utils';
 
 import { Action, ActionData } from 'apps/backend/actions/Action';
@@ -88,6 +88,7 @@ export class AddElfAction extends Action {
                         16
                     )} to 0x${region.endAddress.toString(16)}`;
                     let startAt = performance.now();
+                    let prevWasBranch = false;
                     for (let address = region.startAddress; address < region.endAddress; address += 4) {
                         const current = performance.now();
                         const elapsed = current - startAt;
@@ -104,9 +105,24 @@ export class AddElfAction extends Action {
                         annotation.address = address;
                         annotation.data = {
                             type: 'instruction',
-                            address
+                            address,
+                            isDelaySlot: prevWasBranch
                         } as AnnotationModel;
                         annotations.push(annotation);
+
+                        try {
+                            const op = section.data
+                                ? section.data.getUint32(address - region.startAddress, true)
+                                : null;
+                            if (op) {
+                                const instr = decode(op, address);
+                                prevWasBranch = instr.isBranch;
+                            } else {
+                                prevWasBranch = false;
+                            }
+                        } catch (err) {
+                            prevWasBranch = false;
+                        }
                     }
                 }
 

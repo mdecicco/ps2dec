@@ -2,7 +2,7 @@ import { CircularProgress, CssBaseline, GlobalStyles, ThemeProvider } from '@mui
 import React from 'react';
 
 import { CenteredContent, NoContent } from 'apps/frontend/components';
-import { AppProvider } from 'apps/frontend/context';
+import { AppProvider, MemoryProvider } from 'apps/frontend/context';
 import { useProject } from 'apps/frontend/hooks/useProject';
 import Messager from 'apps/frontend/message';
 import { darkTheme } from 'apps/frontend/theme';
@@ -21,9 +21,17 @@ const TopLevel: React.FC<TopLevelProps> = props => {
         case 'welcome':
             return <WelcomeView />;
         case 'disassembly':
-            return <DisassemblyView />;
+            return (
+                <MemoryProvider withData={false}>
+                    <DisassemblyView />
+                </MemoryProvider>
+            );
         case 'decompilation':
-            return <DecompilationView />;
+            return (
+                <MemoryProvider withData={true}>
+                    <DecompilationView />
+                </MemoryProvider>
+            );
         case 'functions':
             return <FunctionView />;
     }

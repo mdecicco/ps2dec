@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { extractBits } from '../utils';
@@ -25,8 +26,8 @@ export class add extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -57,8 +58,8 @@ export class addu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -89,8 +90,8 @@ export class and extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -119,8 +120,8 @@ export class break_ extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         return new Expr.Break();
     }
 }
@@ -146,8 +147,8 @@ export class dadd extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -178,8 +179,8 @@ export class daddu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -212,8 +213,8 @@ export class div extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[1] as Reg.Register);
 
@@ -225,7 +226,7 @@ export class div extends Instruction {
         decomp.setRegister(this.writes[0], quotient);
         decomp.setRegister(this.writes[1], remainder);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -252,8 +253,8 @@ export class divu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -265,7 +266,7 @@ export class divu extends Instruction {
         decomp.setRegister(this.writes[0], quotient);
         decomp.setRegister(this.writes[1], remainder);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -290,8 +291,8 @@ export class dsll extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -322,8 +323,8 @@ export class dsll32 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32((this.operands[2] as number) + 32);
 
@@ -354,8 +355,8 @@ export class dsllv extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -386,8 +387,8 @@ export class dsra extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -418,8 +419,8 @@ export class dsra32 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32((this.operands[2] as number) + 32);
 
@@ -450,8 +451,8 @@ export class dsrav extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -482,8 +483,8 @@ export class dsrl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -514,8 +515,8 @@ export class dsrl32 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32((this.operands[2] as number) + 32);
 
@@ -546,8 +547,8 @@ export class dsrlv extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -578,8 +579,8 @@ export class dsub extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -610,8 +611,8 @@ export class dsubu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -642,8 +643,8 @@ export class jalr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const target = decomp.getRegister(this.reads[0]);
         const returnAddress = Expr.Imm.u32(this.address + 8);
         decomp.setRegister(this.writes[0], returnAddress);
@@ -671,9 +672,9 @@ export class jr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         if (Reg.compare(this.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })) {
-            const decomp = Decompiler.get();
+            const decomp = Decompiler.current;
             const returnLoc = decomp.cache.func.returnLocation;
             if (returnLoc) {
                 if ('reg' in returnLoc) {
@@ -685,7 +686,7 @@ export class jr extends Instruction {
             return new Expr.RawString(`return`);
         }
 
-        const decomp = Decompiler.get();
+        const decomp = Decompiler.current;
         const target = decomp.getRegister(this.reads[0]);
         return new Expr.UnconditionalBranch(target);
     }
@@ -710,12 +711,12 @@ export class mfhi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const hi = decomp.getRegister(this.reads[0]);
 
         decomp.setRegister(this.writes[0], hi);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -738,12 +739,12 @@ export class mflo extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lo = decomp.getRegister(this.reads[0]);
 
         decomp.setRegister(this.writes[0], lo);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -768,8 +769,8 @@ export class movn extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const checkVar = decomp.getRegister(this.reads[1]);
         const truthy = decomp.getRegister(this.reads[0]);
         const falsy = decomp.getRegister(this.writes[0]);
@@ -797,16 +798,24 @@ export class movz extends Instruction {
             codeStr: 'movz',
             machineCode: rawCode,
             operands: [rd, rs, rt],
-            reads: [rs, rt],
+            // Instruction doesn't actually read rd. This is just a workaround to make the decompiler
+            // generate the correct expression.
+            //
+            // Actual behavior is:
+            // if (rt == 0) rd = rs;
+            //
+            // But we have to represent it as
+            // rd = rt == 0 ? rs : rd
+            reads: [rt, rs, rd],
             writes: [rd]
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        const checkVar = decomp.getRegister(this.reads[1]);
-        const truthy = decomp.getRegister(this.reads[0]);
-        const falsy = decomp.getRegister(this.writes[0]);
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        const checkVar = decomp.getRegister(this.reads[0]);
+        const truthy = decomp.getRegister(this.reads[1]);
+        const falsy = decomp.getRegister(this.reads[2]);
 
         const cond = new Expr.IsEqual(checkVar, Expr.Imm.u32(0));
         const expr = new Expr.Ternary(cond, truthy, falsy);
@@ -834,10 +843,10 @@ export class mthi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -860,10 +869,10 @@ export class mtlo extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -888,8 +897,8 @@ export class mult extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -911,7 +920,7 @@ export class mult extends Instruction {
         decomp.setRegister(this.writes[1], lo);
         decomp.setRegister(this.writes[2], hi);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -936,8 +945,8 @@ export class multu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -959,7 +968,7 @@ export class multu extends Instruction {
         decomp.setRegister(this.writes[1], lo);
         decomp.setRegister(this.writes[2], hi);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -984,8 +993,8 @@ export class nor extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -1017,8 +1026,8 @@ export class or extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -1050,8 +1059,8 @@ export class sll extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -1082,8 +1091,8 @@ export class sllv extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -1114,8 +1123,8 @@ export class slt extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -1146,8 +1155,8 @@ export class sltu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -1178,8 +1187,8 @@ export class sra extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -1210,8 +1219,8 @@ export class srav extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -1242,8 +1251,8 @@ export class srl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.u32(this.operands[2] as number);
 
@@ -1274,8 +1283,8 @@ export class srlv extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -1306,8 +1315,8 @@ export class sub extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -1338,8 +1347,8 @@ export class subu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -1368,9 +1377,9 @@ export class sync extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        return null;
     }
 }
 
@@ -1393,8 +1402,8 @@ export class syscall extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         return new Expr.RawString(`syscall(0x${code.toString(16)})`);
     }
@@ -1421,8 +1430,8 @@ export class teq extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
 
@@ -1451,8 +1460,8 @@ export class tge extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsGreaterOrEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
 
@@ -1481,8 +1490,8 @@ export class tgeu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsGreaterOrEqual(
             decomp.getRegister(this.reads[0]),
@@ -1515,8 +1524,8 @@ export class tlt extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
 
@@ -1545,8 +1554,8 @@ export class tltu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsLess(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]), true);
 
@@ -1575,8 +1584,8 @@ export class tne extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const code = this.operands[0] as number;
         const cond = new Expr.IsNotEqual(decomp.getRegister(this.reads[0]), decomp.getRegister(this.reads[1]));
 
@@ -1605,8 +1614,8 @@ export class xor extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -1635,12 +1644,12 @@ export class mfsa extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const sa = decomp.getRegister(this.reads[0]);
 
         decomp.setRegister(this.writes[0], sa);
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1663,9 +1672,9 @@ export class mtsa extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }

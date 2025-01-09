@@ -14,6 +14,7 @@ export function registerInstructionAnnotation() {
             const op = MemoryService.read32(annotation.address);
             try {
                 const instr = decode(op, annotation.address);
+                const opStr = instr.toStrings()[0];
                 segments.push(
                     {
                         clickAction: null,
@@ -31,7 +32,7 @@ export function registerInstructionAnnotation() {
                             fontFamily: 'Courier New',
                             width: '5rem'
                         },
-                        content: instr.toStrings()[0]
+                        content: annotation.isDelaySlot ? `_${opStr}` : opStr
                     }
                 );
 

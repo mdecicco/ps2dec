@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { Instruction } from './base';
@@ -20,8 +21,8 @@ export class nop extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        return null;
     }
 }
 
@@ -43,7 +44,7 @@ export class b extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.UnconditionalBranch(Expr.Imm.u32(this.operands[0] as number));
     }
 }
@@ -65,10 +66,10 @@ export class move extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -89,9 +90,9 @@ export class li extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], Expr.Imm.i32(this.operands[1] as number));
-        return new Expr.Null();
+        return null;
     }
 }

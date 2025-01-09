@@ -2,7 +2,7 @@ import { FunctionCallEntity, FunctionEntity } from 'apps/backend/entities';
 import { DataTypeService, FunctionService, MemoryService } from 'apps/backend/services';
 import { i, Op, Reg } from 'decoder';
 import { BasicBlock, ControlFlowGraph, DataType, Location, TypeSystem } from 'decompiler';
-import { compareLocations, formatLocation, LocationMap, LocationSet } from 'utils';
+import { compareLocations, LocationMap, LocationSet } from 'utils';
 
 interface ArgumentEvidence {
     location: Location;
@@ -108,7 +108,10 @@ export class FindFunctionSignatureAnalyzer {
         const instructions: i.Instruction[] = [];
         for (let addr = func.address; addr < func.endAddress; addr += 4) {
             const instr = MemoryService.getInstruction(addr);
-            if (!instr) continue;
+            if (!instr) {
+                instructions.push(new i.nop(addr));
+                continue;
+            }
 
             instructions.push(instr);
 
@@ -148,26 +151,14 @@ export class FindFunctionSignatureAnalyzer {
         const cfg = this.getCfg(func, instructions);
         const argEvidence = this.getArgumentEvidence(func, instructions, cfg);
 
-        if (func.name === 'FUN_00100a70') {
-            console.log('FUN_00100a70 before', argEvidence);
-        }
-
         // Update confidence scores with call site information
         for (const evidence of argEvidence.values) {
             evidence.confidence = this.calculateArgumentConfidence(evidence, callSites);
         }
 
-        if (func.name === 'FUN_00100a70') {
-            console.log('FUN_00100a70 after', argEvidence);
-        }
-
         const argLocations = this.determineArgumentLocations(argEvidence, callSites);
         const args: ArgumentMetadata[] = [];
         let isVariadic = false;
-
-        if (func.name === 'FUN_00100a70') {
-            console.log('FUN_00100a70 locs', argLocations);
-        }
 
         if (this.isLikelyVariadic(cfg, argLocations.gpArgs, argLocations.fpArgs)) {
             isVariadic = true;
@@ -227,21 +218,12 @@ export class FindFunctionSignatureAnalyzer {
         // if (isVariadic) argStrs.push('...');
         // console.log(`${returnValue.type.name} ${func.name}(${argStrs.join(', ')})`);
 
-        if (func.name === 'FUN_00100a70') {
-            const argStrs = args.map(a => `${a.type.name} ${formatLocation(a.location)}`);
-            if (isVariadic) argStrs.push('...');
-            console.log(`${returnValue.type.name} ${func.name}(${argStrs.join(', ')})`);
-        }
         const sig = TypeSystem.get().getSignatureType(
             returnValue.type,
             args.map(a => a.type),
             isVariadic
         );
         await DataTypeService.waitFor(sig.id);
-
-        if (func.name === 'FUN_00100a70') {
-            console.log(sig);
-        }
 
         let funcIds = this.m_updateFuncIdBySigId.get(sig.id);
         if (!funcIds) {
@@ -406,8 +388,30 @@ export class FindFunctionSignatureAnalyzer {
         return instr.isStore && this.getStackOffset(instr, ignoreBackups) === location;
     }
 
+    private instructionUsesLocation(instr: i.Instruction, location: Location): boolean {
+        if (typeof location !== 'number') {
+            if (instr.readsFrom(location)) return true;
+        }
+
+        if (instr.isLoad && this.getStackOffset(instr, true) === location) return true;
+
+        if (instr.isBranch) {
+            const target = instr.operands[instr.operands.length - 1];
+            if (typeof target === 'number') {
+                const calleeMetadata = this.m_signatureMetadata.get(target);
+                if (calleeMetadata) {
+                    for (const arg of calleeMetadata.args) {
+                        if (compareLocations(arg.location, location)) return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     private getStackOffset(instr: i.Instruction, ignoreBackups: boolean = false): number | null {
-        const dest = instr.operands.find(op => Op.isMemOperand(op));
+        const dest = instr.operands.find(op => Op.isMem(op));
         if (!dest) return null;
 
         if (!Reg.compare(dest.base, { type: Reg.Type.EE, id: Reg.EE.SP })) {
@@ -559,8 +563,8 @@ export class FindFunctionSignatureAnalyzer {
                 const instructions: i.Instruction[] = [];
                 for (let addr = func.address; addr < func.endAddress; addr += 4) {
                     const instr = MemoryService.getInstruction(addr);
-                    if (!instr) continue;
-                    instructions.push(instr);
+                    if (!instr) instructions.push(new i.nop(addr));
+                    else instructions.push(instr);
                 }
 
                 cfg = ControlFlowGraph.build(instructions);
@@ -852,20 +856,19 @@ export class FindFunctionSignatureAnalyzer {
         callSites: CallSiteInfo[]
     ): ReturnValueMetadata {
         const potentialReturns = new LocationSet();
-        const seenBlocks = new Set<number>();
-        const workList = [cfg.getEntryBlock()];
+        const directAssignments: { location: Location; block: BasicBlock; instruction: i.Instruction }[] = [];
 
         // First find assignments to potential return registers
-        while (workList.length > 0) {
-            const block = workList.shift();
-            if (!block || seenBlocks.has(block.startAddress)) continue;
-            seenBlocks.add(block.startAddress);
+        const entry = cfg.getEntryBlock();
+        if (!entry) return { type: TypeSystem.get().getType('void'), location: null };
 
+        entry.walkForward(block => {
             for (const instr of block.instructions) {
                 // Check for assignments to return registers
                 for (const reg of instr.writes) {
                     if (this.isPotentialReturnRegister(reg)) {
                         potentialReturns.add(reg);
+                        directAssignments.push({ location: reg, block, instruction: instr });
                     }
                 }
 
@@ -881,11 +884,51 @@ export class FindFunctionSignatureAnalyzer {
                 }
             }
 
-            workList.push(...block.successors);
-        }
+            return true;
+        });
 
         if (potentialReturns.size === 0) {
             return { type: TypeSystem.get().getType('void'), location: null };
+        }
+
+        // Check if any direct assignments to return registers reach a jr $ra without
+        // being used
+        for (const assignment of directAssignments) {
+            let foundUse = false;
+            let foundReturn = false;
+
+            assignment.block.walkForward(block => {
+                block.each(
+                    instr => {
+                        if (instr === assignment.instruction) return;
+
+                        if (this.instructionUsesLocation(instr, assignment.location)) {
+                            foundUse = true;
+                            return true;
+                        }
+
+                        if (
+                            instr.code === Op.Code.jr &&
+                            Reg.compare(instr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })
+                        ) {
+                            foundReturn = true;
+                            return true;
+                        }
+                    },
+                    block === assignment.block ? assignment.instruction : undefined
+                );
+
+                return !foundUse && !foundReturn;
+            });
+
+            if (foundReturn && !foundUse) {
+                // Return register assigned and not used prior to the return, that's
+                // a pretty good indicator that it's a return value
+                return {
+                    type: this.determineReturnType(cfg, assignment.location),
+                    location: assignment.location
+                };
+            }
         }
 
         // Now check how callers use these potential return values
@@ -901,36 +944,29 @@ export class FindFunctionSignatureAnalyzer {
                 const block = cfg.getBlock(site.address);
                 if (!block) continue;
 
+                const siteInstr = block.instructions.find(instr => instr.address === site.address)!;
+
                 // Look for uses of the return value after the call
 
-                const seenBlocks = new Set<number>();
-                const workList = [block];
-
-                while (workList.length > 0) {
-                    const cur = workList.shift();
-                    if (!cur || seenBlocks.has(cur.startAddress)) continue;
-                    seenBlocks.add(cur.startAddress);
-
-                    let foundUse = false;
-                    let seenAssignment = false;
-
-                    for (let i = 0; i < cur.instructions.length; i++) {
-                        const instr = cur.instructions[i];
-                        if (instr.address <= site.address) continue;
+                let foundUse = false;
+                let foundDef = false;
+                block.walkForward(succ => {
+                    const checkInstr = (instr: i.Instruction) => {
+                        if (instr === siteInstr) return;
 
                         if (typeof returnLoc !== 'number') {
                             if (instr.readsFrom(returnLoc)) {
                                 foundUse = true;
                                 usedCallSites++;
-                                break;
+                                return true;
                             }
                         } else if (instr.isLoad && this.getStackOffset(instr, true) === returnLoc) {
                             foundUse = true;
                             usedCallSites++;
-                            break;
+                            return true;
                         } else if (instr.isBranch) {
                             const target = instr.operands[instr.operands.length - 1];
-                            if (typeof target !== 'number') continue;
+                            if (typeof target !== 'number') return;
 
                             const calleeMetadata = this.m_signatureMetadata.get(target);
                             if (calleeMetadata) {
@@ -939,22 +975,22 @@ export class FindFunctionSignatureAnalyzer {
                                     if (compareLocations(arg.location, returnLoc)) {
                                         foundUse = true;
                                         usedCallSites++;
-                                        break;
+                                        return true;
                                     }
                                 }
                             }
                         }
 
                         if (this.instructionAssignsLocation(instr, returnLoc, true)) {
-                            seenAssignment = true;
-                            break;
+                            foundDef = true;
+                            return true;
                         }
-                    }
+                    };
 
-                    if (foundUse || seenAssignment) break;
+                    succ.each(checkInstr, block === succ ? siteInstr : undefined);
 
-                    workList.push(...cur.successors);
-                }
+                    return !foundUse && !foundDef;
+                });
 
                 totalCallSites++;
             }

@@ -312,7 +312,7 @@ export function isImmediate(operand: Operand): operand is ImmediateOperand {
     return typeof operand === 'number';
 }
 
-export function isMemOperand(operand: Operand): operand is MemOperand {
+export function isMem(operand: Operand): operand is MemOperand {
     return typeof operand !== 'number' && 'base' in operand;
 }
 

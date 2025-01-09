@@ -1,3 +1,4 @@
+export * as Expr from './expressions';
 export * as i from './instructions';
 export * as Op from './opcodes';
 export * as Reg from './registers';
@@ -358,7 +359,7 @@ const InstructionSet: Match = {
         [0b000111, i.bgtzl],
         [0b000110, i.blez],
         [0b010110, i.blezl],
-        [0b000101, i.bnel],
+        [0b000101, i.bne],
         [0b010101, i.bnel],
         [0b011000, i.daddi],
         [0b011001, i.daddiu],

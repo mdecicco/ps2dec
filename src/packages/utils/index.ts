@@ -29,3 +29,7 @@ export function compareVersionedLocations(a: VersionedLocation, b: VersionedLoca
 export function formatVersionedLocation(location: VersionedLocation): string {
     return `${formatLocation(location.value)}_${location.version}`;
 }
+
+export function formatAddress(address: number): string {
+    return `0x${address.toString(16).padStart(8, '0')}`;
+}

@@ -1,10 +1,9 @@
-import { CircularProgress } from '@mui/material';
-import { CenteredContent } from 'apps/frontend/components';
 import { useProject } from 'apps/frontend/hooks';
 import Messager from 'apps/frontend/message';
 import {
     ArrayType,
     BitfieldType,
+    Decompiler,
     EnumType,
     Func,
     FunctionSignatureType,
@@ -56,19 +55,24 @@ export const AppContext = React.createContext<AppContextType>({
     functions: [],
     loadingFunctions: false,
     getFunctionById: (id: number) => {
-        throw new Error('Not implemented');
+        throw new Error('Not initialized');
     },
-    getFunctionByAddress: (address: number) => null,
+    getFunctionByAddress: (address: number) => {
+        throw new Error('Not initialized');
+    },
     getFunctionModelById: (id: number) => {
-        throw new Error('Not implemented');
+        throw new Error('Not initialized');
     },
-    getFunctionModelByAddress: (address: number) => null
+    getFunctionModelByAddress: (address: number) => {
+        throw new Error('Not initialized');
+    }
 });
 
 function transformFunction(func: FunctionModel) {
     return Func.rehydrate({
         id: func.id,
         address: func.address,
+        endAddress: func.endAddress,
         isConstructor: func.isConstructor,
         isDestructor: func.isDestructor,
         name: func.name,
@@ -352,10 +356,22 @@ export const AppProvider: React.FC<{ children?: React.ReactNode }> = props => {
             })
         );
 
+        Decompiler.dataSource.findFunctionById = (id: number) => {
+            const idx = functionIndicesById.current.get(id);
+            if (!idx) throw new Error(`Function id ${id} not found`);
+            return functions[idx];
+        };
+
+        Decompiler.dataSource.findFunctionByAddress = (address: number) => {
+            const idx = functionIndicesByAddress.current.get(address);
+            if (!idx) return null;
+            return functions[idx];
+        };
+
         return () => {
             listeners.forEach(l => l());
         };
-    }, [dataTypes.length, vtables.length, functions.length]);
+    }, [dataTypes, vtables, functions]);
 
     return (
         <AppContext.Provider
@@ -389,13 +405,7 @@ export const AppProvider: React.FC<{ children?: React.ReactNode }> = props => {
                 }
             }}
         >
-            {loadedDataTypes && loadedVTables && loadedFunctions ? (
-                props.children
-            ) : (
-                <CenteredContent>
-                    <CircularProgress />
-                </CenteredContent>
-            )}
+            {props.children}
         </AppContext.Provider>
     );
 };

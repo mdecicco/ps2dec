@@ -1,42 +1,40 @@
-import { i, Op, Reg } from 'decoder';
+import { Expr, i, Op, Reg } from 'decoder';
+import { PrimitiveType } from 'decompiler';
+import { compareVersionedLocations, formatVersionedLocation } from 'utils';
 import { ASTBuilder } from '../ast/builder';
 import * as nodes from '../ast/nodes';
 import { CodeBuilder } from '../codegen/codebuilder';
+import { Location } from '../common';
 import { Decompiler } from '../decompiler';
-import * as Expr from '../expr/base';
-import { PrimitiveType } from '../typesys';
+import { FunctionCode } from '../input';
 import { BasicBlock, ControlFlowGraph } from './cfg';
-import { DominatorInfo } from './dominators';
-import { BranchChain, IfStatement, SSABranchAnalyzer } from './flow_branches';
-import { Loop, LoopType, SSALoopAnalyzer } from './flow_loops';
-import { SSAForm } from './ssa';
+import { BranchAnalyzer, BranchChain, IfStatement } from './flow_branches';
+import { Loop, LoopAnalyzer, LoopType } from './flow_loops';
 
-export class SSAControlFlowAnalyzer {
+export class ControlFlowAnalyzer {
     private m_loops: Loop[] = [];
     private m_branches: IfStatement[] = [];
     private m_branchChains: BranchChain[] = [];
-    private m_dominators: DominatorInfo;
     private m_builder: ASTBuilder = new ASTBuilder();
-    private m_cfg: ControlFlowGraph;
-    private m_ssa: SSAForm;
     private m_astLoopStack: Loop[] = [];
+    private m_func: FunctionCode;
+    private m_cfg: ControlFlowGraph;
 
-    constructor(cfg: ControlFlowGraph, dominators: DominatorInfo, ssa: SSAForm) {
-        this.m_cfg = cfg;
-        this.m_dominators = dominators;
-        this.m_ssa = ssa;
+    constructor(func: FunctionCode) {
+        this.m_func = func;
+        this.m_cfg = func.cfg;
     }
 
     analyze() {
         // Find loops first
-        const loopAnalyzer = new SSALoopAnalyzer(this.m_cfg, this.m_dominators, this.m_ssa);
+        const loopAnalyzer = new LoopAnalyzer(this.m_func);
         this.m_loops = loopAnalyzer.findLoops();
 
         // Get all loop branch instructions
         const loopBranches = this.m_loops.flatMap(loop => (loop.condition ? [loop.condition.instruction] : []));
 
         // Find non-loop branches
-        const branchAnalyzer = new SSABranchAnalyzer(this.m_cfg, this.m_dominators, this.m_ssa, loopBranches);
+        const branchAnalyzer = new BranchAnalyzer(this.m_cfg, loopBranches);
         const branchResult = branchAnalyzer.findBranches();
         this.m_branches = branchResult.branches;
         this.m_branchChains = branchResult.chains;
@@ -81,7 +79,44 @@ export class SSAControlFlowAnalyzer {
             const structAddr = this.getStructureAddress(struct);
             const preBlocks = this.getBlocksBefore(remainingBlocks, structAddr);
             if (preBlocks.size > 0) {
-                const preInstructions = Array.from(preBlocks).flatMap(b => b.instructions);
+                // If the blocks have any phi nodes that don't get initialized to a value
+                // within the preBlocks, we need to declare them as variables.
+
+                const preInstructions: i.Instruction[] = [];
+                for (const block of preBlocks) {
+                    const phis = this.m_func.getBlockPhis(block);
+                    for (const phi of phis) {
+                        let wasDefined = false;
+                        block.each(instr => {
+                            const defs = this.m_func.getDefs(instr);
+
+                            for (const phiDef of phi.definitions) {
+                                for (const instDef of defs) {
+                                    if (compareVersionedLocations(phiDef, instDef)) {
+                                        // Phi has a definition in this block, don't declare it now because an instruction will
+                                        // generate it later with an initialization.
+                                        wasDefined = true;
+                                        return true;
+                                    }
+                                }
+                            }
+                        });
+
+                        if (!wasDefined) {
+                            // If the phi node is not defined in this block, we need to declare it as a variable
+                            statements.push(
+                                this.m_builder.createStatement(
+                                    this.m_builder.createVariableDeclaration(phi.variable.value, null)
+                                )
+                            );
+                        }
+                    }
+
+                    block.each(instr => {
+                        preInstructions.push(instr);
+                    });
+                }
+
                 statements.push(...this.instructionsToStatements(preInstructions));
                 preBlocks.forEach(b => remainingBlocks.delete(b));
             }
@@ -99,7 +134,42 @@ export class SSAControlFlowAnalyzer {
 
         // Add statements from any remaining blocks
         if (remainingBlocks.size > 0) {
-            const remainingInstructions = Array.from(remainingBlocks).flatMap(b => b.instructions);
+            const remainingInstructions: i.Instruction[] = [];
+            for (const block of remainingBlocks) {
+                const phis = this.m_func.getBlockPhis(block);
+
+                for (const phi of phis) {
+                    let wasDefined = false;
+                    block.each(instr => {
+                        const defs = this.m_func.getDefs(instr);
+
+                        for (const phiDef of phi.definitions) {
+                            for (const instDef of defs) {
+                                if (compareVersionedLocations(phiDef, instDef)) {
+                                    // Phi has a definition in this block, don't declare it now because an instruction will
+                                    // generate it later with an initialization.
+                                    wasDefined = true;
+                                    return true;
+                                }
+                            }
+                        }
+                    });
+
+                    if (!wasDefined) {
+                        // If the phi node is not defined in this block, we need to declare it as a variable
+                        statements.push(
+                            this.m_builder.createStatement(
+                                this.m_builder.createVariableDeclaration(phi.variable.value, null)
+                            )
+                        );
+                    }
+                }
+
+                block.each(instr => {
+                    remainingInstructions.push(instr);
+                });
+            }
+
             statements.push(...this.instructionsToStatements(remainingInstructions));
         }
 
@@ -143,7 +213,7 @@ export class SSAControlFlowAnalyzer {
     }
 
     private instructionsToStatements(instructions: i.Instruction[]): nodes.StatementNode[] {
-        const decomp = Decompiler.get();
+        const decomp = Decompiler.current;
         const stmts: nodes.StatementNode[] = [];
 
         const allowedBranches = new Set([Op.Code.b, Op.Code.jal, Op.Code.jalr, Op.Code.j, Op.Code.jr]);
@@ -162,10 +232,10 @@ export class SSAControlFlowAnalyzer {
                 const currentFunc = decomp.cache.func;
                 if (currentFunc.returnLocation) {
                     if ('reg' in currentFunc.returnLocation) {
-                        const returnExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.reg);
+                        const returnExpr = this.m_func.getValueAt(currentFunc.returnLocation.reg, instr.address);
                         retString += ` ${returnExpr}`;
                     } else {
-                        const returnExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.offset);
+                        const returnExpr = this.m_func.getValueAt(currentFunc.returnLocation.offset, instr.address);
                         retString += ` ${returnExpr}`;
                     }
                 }
@@ -180,9 +250,9 @@ export class SSAControlFlowAnalyzer {
 
                                 let retExpr: Expr.Expression | null = null;
                                 if ('reg' in currentFunc.returnLocation) {
-                                    retExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.reg);
+                                    retExpr = this.m_func.getValueAt(currentFunc.returnLocation.reg, instr.address);
                                 } else {
-                                    retExpr = this.m_ssa.getMostRecentDef(instr, currentFunc.returnLocation.offset);
+                                    retExpr = this.m_func.getValueAt(currentFunc.returnLocation.offset, instr.address);
                                 }
 
                                 if (retExpr) code.expression(retExpr);
@@ -204,36 +274,30 @@ export class SSAControlFlowAnalyzer {
                 // if that register is never used again, the call should still be shown in the AST
                 // Find out if the register set by the call is used again
                 const target = instr.operands[instr.operands.length - 1] as number;
-                const func = Decompiler.get().funcDb.findFunctionByAddress(target);
+                const func = Decompiler.findFunctionByAddress(target);
                 if (func && func.returnLocation) {
+                    let location: Location;
                     if ('reg' in func.returnLocation) {
-                        const reg = func.returnLocation.reg;
-                        if (this.m_ssa.hasUses(instr, reg)) omit = true;
+                        location = func.returnLocation.reg;
                     } else {
-                        const offset = func.returnLocation.offset;
-                        if (this.m_ssa.hasUses(instr, offset)) omit = true;
+                        location = func.returnLocation.offset;
                     }
+
+                    const def = this.m_func.getDef(instr, location);
+                    if (this.m_func.getUsesOf(def).length > 0) omit = true;
                 }
             } else if (instr.code === Op.Code.jalr) {
                 // Indirect calls are more complicated, just log it as is for now
-            } else {
-                // Skip instructions that set registers (they will appear in other expressions that use the results)
-                if (instr.writes.length > 0) omit = true;
             }
 
             const stmt = this.m_builder.createStatement(
-                this.m_builder.createExpression(instr, omit, () => instr.toExpression())
+                this.m_builder.createExpression(instr, omit, () => instr.generate())
             );
             stmts.push(stmt);
         };
 
         for (let i = 0; i < instructions.length; i++) {
             const instr = instructions[i];
-            if (instr.isBranch && !instr.isLikelyBranch) {
-                handleInstr(instructions[i + 1]);
-                i++;
-            }
-
             handleInstr(instr);
         }
 
@@ -256,13 +320,15 @@ export class SSAControlFlowAnalyzer {
         const body = this.processBlocks(bodyBlocks, loop);
 
         // Get condition expression
-        let condition = loop.condition?.instruction.toExpression();
+        let condition = loop.condition?.instruction.generate();
         if (condition instanceof Expr.ConditionalBranch) {
             condition = condition.condition;
         }
 
         const condExpr = this.m_builder.createExpression(loop.condition!.instruction, false, () => {
-            let expr = loop.condition!.instruction.toExpression();
+            let expr = loop.condition!.instruction.generate();
+            if (!expr) return null;
+
             if (expr instanceof Expr.ConditionalBranch) {
                 expr = expr.condition;
             }
@@ -277,20 +343,26 @@ export class SSAControlFlowAnalyzer {
                 const initInstr = loop.inductionVar!.initInstruction;
                 const stepInstr = loop.inductionVar!.stepInstruction;
 
-                const init = this.m_builder.createStatement(
-                    this.m_builder.createExpression(initInstr, false, () => {
-                        const gen = initInstr.toExpression();
-                        gen.address = initInstr.address;
-                        return gen;
-                    })
-                );
-                const step = this.m_builder.createStatement(
-                    this.m_builder.createExpression(stepInstr, false, () => {
-                        const gen = stepInstr.toExpression();
-                        gen.address = stepInstr.address;
-                        return gen;
-                    })
-                );
+                const init = initInstr
+                    ? this.m_builder.createStatement(
+                          this.m_builder.createExpression(initInstr, false, () => {
+                              const gen = initInstr.generate();
+                              if (!gen) return null;
+
+                              gen.address = initInstr.address;
+                              return gen;
+                          })
+                      )
+                    : null;
+                const step = stepInstr
+                    ? this.m_builder.createExpression(stepInstr, false, () => {
+                          const gen = stepInstr.generate();
+                          if (!gen) return null;
+
+                          gen.address = stepInstr.address;
+                          return gen;
+                      })
+                    : null;
                 const stmt = this.m_builder.createStatement(
                     this.m_builder.createForLoop(init, condExpr, step, body, loop.inductionVar!)
                 );
@@ -327,13 +399,18 @@ export class SSAControlFlowAnalyzer {
         let elseBody = elseBlocks.size > 0 ? this.processBlocks(elseBlocks, branch) : undefined;
 
         // Get condition expression
-        let condition = branch.condition.toExpression().reduce();
+        let condition = branch.condition.generate();
+        if (condition) condition = condition.reduce();
         if (condition instanceof Expr.ConditionalBranch) {
             condition = condition.condition.reduce();
         }
 
         const condExpr = this.m_builder.createExpression(branch.condition, false, () => {
-            let expr = branch.condition.toExpression().reduce();
+            const cond = branch.condition.generate();
+            if (!cond) return null;
+            let expr = cond;
+
+            expr = expr.reduce();
             if (expr instanceof Expr.ConditionalBranch) {
                 expr = expr.condition.reduce();
             }
@@ -341,8 +418,8 @@ export class SSAControlFlowAnalyzer {
 
             if (!thenBody && elseBody) {
                 // If block with inverted condition
-                if (Expr.isLogical(condition)) expr = condition.logicalInversion();
-                else expr = new Expr.Not(condition).copyFrom(condition);
+                if (Expr.isLogical(expr)) expr = expr.logicalInversion();
+                else expr = new Expr.Not(expr).copyFrom(expr);
 
                 // reduce it using conditional branch logic
                 const b = new Expr.ConditionalBranch(expr, 0).reduce() as Expr.ConditionalBranch;
@@ -369,7 +446,9 @@ export class SSAControlFlowAnalyzer {
         return this.m_builder.createStatement(this.m_builder.createIfElse(condExpr, thenBody, elseBody));
     }
 
-    public generateCondition(cond: Expr.Expression, code: CodeBuilder, invert?: boolean): void {
+    public generateCondition(cond: Expr.Expression | null, code: CodeBuilder, invert?: boolean): void {
+        if (!cond) return;
+
         if (invert) {
             if (Expr.isLogical(cond)) cond = cond.logicalInversion();
             else cond = new Expr.Not(cond).copyFrom(cond);
@@ -396,7 +475,7 @@ export class SSAControlFlowAnalyzer {
                 }
                 break;
             case nodes.NodeType.Expression:
-                this.generateExpression(ast, code);
+                if (this.generateExpression(ast, code)) code.punctuation(';');
                 break;
             case nodes.NodeType.Statement:
                 this.generate(ast.statement, code);
@@ -470,182 +549,192 @@ export class SSAControlFlowAnalyzer {
                 code.popAddress();
                 break;
             case nodes.NodeType.IfElse:
-                const thenIsEmpty = !ast.thenBody.statements.some(
-                    stmt => stmt.statement.type !== nodes.NodeType.Expression || !stmt.statement.omit
-                );
-                const elseIsEmpty = !ast.elseBody.statements.some(
-                    stmt => stmt.statement.type !== nodes.NodeType.Expression || !stmt.statement.omit
-                );
-
-                if (thenIsEmpty && elseIsEmpty) {
-                    code.pushAddress(ast.condition.instruction.address);
-                    code.comment('// Empty if-else');
+                this.generateIfElse(ast, code);
+                break;
+            case nodes.NodeType.VariableDeclaration:
+                ast.variable.hasDeclaration = true;
+                if (ast.initializer) {
+                    code.pushAddress(ast.initializer.instruction.address);
+                    code.dataType(ast.variable.type);
+                    code.whitespace(1);
+                    code.variable(ast.variable);
+                    code.whitespace(1);
+                    code.punctuation('=');
+                    code.whitespace(1);
+                    this.generateExpression(ast.initializer, code);
+                    code.punctuation(';');
                     code.popAddress();
-                    code.newLine();
-
-                    // still need to run the expression generators
-                    ast.thenBody.statements.forEach(stmt => {
-                        if (stmt.statement.type === nodes.NodeType.Expression) {
-                            stmt.statement.expressionGen();
-                        }
-                    });
-                    ast.elseBody.statements.forEach(stmt => {
-                        if (stmt.statement.type === nodes.NodeType.Expression) {
-                            stmt.statement.expressionGen();
-                        }
-                    });
-                    break;
+                } else {
+                    code.dataType(ast.variable.type);
+                    code.whitespace(1);
+                    code.variable(ast.variable);
+                    code.punctuation(';');
                 }
-
-                if (elseIsEmpty) {
-                    code.pushAddress(ast.condition.instruction.address);
-                    code.keyword('if');
-                    code.whitespace(1);
-                    code.punctuation('(');
-                    this.generateCondition(ast.condition.expressionGen(), code);
-                    code.punctuation(')');
-                    code.whitespace(1);
-                    code.punctuation('{');
-                    code.popAddress();
-
-                    code.indent();
-                    code.newLine();
-                    this.generate(ast.thenBody, code);
-                    code.unindent();
-                    code.newLine();
-
-                    code.pushAddress(ast.condition.instruction.address);
-                    code.punctuation('}');
-                    code.popAddress();
-
-                    // still need to run the expression generators
-                    ast.elseBody.statements.forEach(stmt => {
-                        if (stmt.statement.type === nodes.NodeType.Expression) {
-                            stmt.statement.expressionGen();
-                        }
-                    });
-                    break;
-                }
-
-                if (thenIsEmpty) {
-                    // If block with inverted condition
-
-                    // still need to run the expression generators
-                    ast.thenBody.statements.forEach(stmt => {
-                        if (stmt.statement.type === nodes.NodeType.Expression) {
-                            stmt.statement.expressionGen();
-                        }
-                    });
-
-                    let cond = ast.condition.expressionGen();
-
-                    code.pushAddress(ast.condition.instruction.address);
-                    code.keyword('if');
-                    code.whitespace(1);
-                    code.punctuation('(');
-                    this.generateCondition(cond, code, true);
-                    code.punctuation(')');
-                    code.whitespace(1);
-                    code.punctuation('{');
-                    code.popAddress();
-
-                    code.indent();
-                    code.newLine();
-                    this.generate(ast.elseBody, code);
-                    code.unindent();
-                    code.newLine();
-
-                    code.pushAddress(ast.condition.instruction.address);
-                    code.punctuation('}');
-                    code.popAddress();
-                    break;
-                }
-
-                code.pushAddress(ast.condition.instruction.address);
-                code.keyword('if');
-                code.whitespace(1);
-                code.punctuation('(');
-                this.generateCondition(ast.condition.expressionGen(), code);
-                code.punctuation(')');
-                code.whitespace(1);
-                code.punctuation('{');
-                code.popAddress();
-
-                code.indent();
-                code.newLine();
-                this.generate(ast.thenBody, code);
-                code.unindent();
-                code.newLine();
-
-                code.pushAddress(ast.condition.instruction.address);
-                code.punctuation('}');
-                code.whitespace(1);
-                code.keyword('else');
-                code.whitespace(1);
-                code.punctuation('{');
-                code.popAddress();
-
-                code.indent();
-                code.newLine();
-                this.generate(ast.elseBody, code);
-                code.unindent();
-                code.newLine();
-
-                code.pushAddress(ast.condition.instruction.address);
-                code.punctuation('}');
-                code.popAddress();
                 break;
         }
     }
 
-    private generateExpression(ast: nodes.ExpressionNode, code: CodeBuilder): void {
+    private generateExpression(ast: nodes.ExpressionNode, code: CodeBuilder): boolean {
         // determine if this expression assignes a value to a variable
-        const decomp = Decompiler.get();
-        if (decomp.isAddressIgnored(ast.instruction.address)) return;
+        const decomp = Decompiler.current;
+        if (decomp.isAddressIgnored(ast.instruction.address)) return false;
 
         let didDeclareOrAssign = false;
         code.pushAddress(ast.instruction.address);
 
-        ast.instruction.writes.forEach(w => {
-            const def = this.m_ssa.getDef(ast.instruction, w);
-            if (!def) return;
-
-            const v = decomp.vars.getVariableWithVersion(w, def.version);
-            if (!v) return;
+        this.m_func.getDefs(ast.instruction, true).forEach(def => {
+            const variable = decomp.vars.getVariable(def);
+            if (!variable) {
+                return;
+            }
+            console.log(
+                `${ast.instruction.toString(true).padEnd(40, ' ')}: ${variable.toString()} (${formatVersionedLocation(
+                    def
+                )}) defined as ${def.assignedTo}`
+            );
 
             // If the variable is just being moved to another location, skip it
-            if (def.value instanceof Expr.Variable && def.value.value === v) return;
+            if (def.assignedTo instanceof Expr.Variable && def.assignedTo.value === variable) return;
 
-            const versions = v.getSSAVersions(w).sort((a, b) => a - b);
+            const versions = variable.getSSAVersions(def.value).sort((a, b) => a - b);
             if (versions[0] === def.version) {
-                if (!v.hasDeclaration) {
+                if (!variable.hasDeclaration) {
+                    variable.hasDeclaration = true;
                     // If it's the first one to write to the variable, declare it
-                    code.dataType(v.type);
+                    code.dataType(variable.type);
                     code.whitespace(1);
-                    code.variable(v);
+                    code.variable(variable);
                     code.whitespace(1);
-                    code.keyword('=');
+                    code.punctuation('=');
                     code.whitespace(1);
-                    code.expression(def.value);
-                    code.punctuation(';');
+                    code.expression(def.assignedTo);
+                    didDeclareOrAssign = true;
                 }
             } else {
                 // Otherwise, just print the assignment
-                code.variable(v);
-                code.whitespace(1);
-                code.keyword('=');
-                code.whitespace(1);
-                code.expression(def.value);
-                code.punctuation(';');
-            }
 
-            didDeclareOrAssign = true;
+                const value = def.assignedTo;
+                const tryMinify = (cls: typeof Expr.BinaryExpression, op: string, needsSelfAsLhs: boolean) => {
+                    if (!(value instanceof cls)) return false;
+
+                    let other: Expr.Expression | null = null;
+                    if (value.lhs instanceof Expr.Variable && value.lhs.value === variable) {
+                        other = value.rhs;
+                    } else if (value.rhs instanceof Expr.Variable && value.rhs.value === variable && !needsSelfAsLhs) {
+                        other = value.lhs;
+                    } else {
+                        // Expression not minifiable
+                        return false;
+                    }
+
+                    if (cls === Expr.Add) {
+                        if (other instanceof Expr.Imm) {
+                            const type = other.type as PrimitiveType;
+                            if (type.isFloatingPoint && other.toF32() === 1.0) {
+                                code.variable(variable);
+                                code.punctuation('++');
+                                return true;
+                            } else if (!type.isFloatingPoint && other.value === 1n) {
+                                code.variable(variable);
+                                code.punctuation('++');
+                                return true;
+                            } else if (type.isFloatingPoint && other.toF32() === -1.0) {
+                                code.variable(variable);
+                                code.punctuation('--');
+                                return true;
+                            } else if (!type.isFloatingPoint && other.value === -1n) {
+                                code.variable(variable);
+                                code.punctuation('--');
+                                return true;
+                            }
+
+                            const zero = Expr.Imm.typed(0, other.type);
+                            const isNeg = Expr.foldConstants(other, zero, 'lt').value === 1n;
+
+                            if (isNeg) {
+                                op = '-=';
+                                other = Expr.foldConstants(other, other, 'neg');
+                            }
+                        }
+                    } else if (cls === Expr.Sub) {
+                        if (other instanceof Expr.Imm) {
+                            const type = other.type as PrimitiveType;
+                            if (type.isFloatingPoint && other.toF32() === 1.0) {
+                                code.variable(variable);
+                                code.punctuation('--');
+                                return true;
+                            } else if (!type.isFloatingPoint && other.value === 1n) {
+                                code.variable(variable);
+                                code.punctuation('--');
+                                return true;
+                            } else if (type.isFloatingPoint && other.toF32() === -1.0) {
+                                code.variable(variable);
+                                code.punctuation('++');
+                                return true;
+                            } else if (!type.isFloatingPoint && other.value === -1n) {
+                                code.variable(variable);
+                                code.punctuation('++');
+                                return true;
+                            }
+
+                            const zero = Expr.Imm.typed(0, other.type);
+                            const isNeg = Expr.foldConstants(other, zero, 'lt').value === 1n;
+
+                            if (isNeg) {
+                                op = '+=';
+                                other = Expr.foldConstants(other, other, 'neg');
+                            }
+                        }
+                    }
+
+                    code.variable(variable);
+                    code.whitespace(1);
+                    code.punctuation(op);
+                    code.whitespace(1);
+                    code.expression(other);
+
+                    return true;
+                };
+
+                const minifyEntries: [typeof Expr.BinaryExpression, string, boolean][] = [
+                    [Expr.Add, '+=', false],
+                    [Expr.Sub, '-=', true],
+                    [Expr.Mul, '*=', false],
+                    [Expr.Div, '/=', true],
+                    [Expr.BitwiseAnd, '&=', false],
+                    [Expr.BitwiseOr, '|=', false],
+                    [Expr.BitwiseXOr, '^=', false],
+                    [Expr.ShiftLeft, '<<=', true],
+                    [Expr.ShiftRight, '>>=', true],
+                    [Expr.Mod, '%=', true]
+                ];
+
+                let didMinify = false;
+                for (const [cls, op, needsSelfAsLhs] of minifyEntries) {
+                    if (tryMinify(cls, op, needsSelfAsLhs)) {
+                        didMinify = true;
+                        break;
+                    }
+                }
+
+                if (!didMinify) {
+                    code.variable(variable);
+                    code.whitespace(1);
+                    code.punctuation('=');
+                    code.whitespace(1);
+                    code.expression(def.assignedTo);
+                }
+
+                didDeclareOrAssign = true;
+            }
         });
 
         code.popAddress();
-        if (didDeclareOrAssign) return;
+        if (didDeclareOrAssign) return true;
 
         const expr = ast.expressionGen();
+        if (!expr) return false;
+
         if (expr instanceof Expr.Call) {
             // Calls will have an effect on the program state, so we MUST ensure that if the call sets a register,
             // if that register is never used again, the call should still be shown in the AST
@@ -653,164 +742,48 @@ export class SSAControlFlowAnalyzer {
             const func = expr.target;
             if (func && func.returnLocation) {
                 if ('reg' in func.returnLocation) {
-                    const reg = func.returnLocation.reg;
-                    if (this.m_ssa.hasUses(ast.instruction, reg)) return;
+                    const def = this.m_func.getDefAt(func.returnLocation.reg, ast.instruction.address);
+                    if (!def) throw new Error('Failed to find def for call return location');
+
+                    if (this.m_func.getUsesOf(def).length > 0) return false;
                 } else {
-                    const offset = func.returnLocation.offset;
-                    if (this.m_ssa.hasUses(ast.instruction, offset)) return;
+                    const def = this.m_func.getDefAt(func.returnLocation.offset, ast.instruction.address);
+                    if (!def) throw new Error('Failed to find def for call return location');
+
+                    if (this.m_func.getUsesOf(def).length > 0) return false;
                 }
             }
         } else if (expr instanceof Expr.IndirectCall) {
             // Indirect calls are more complicated, just log it as is for now
         } else {
             // Skip instructions that set registers (they will appear in other expressions that use the results)
-            if (ast.instruction.writes.length > 0) return;
+            if (ast.instruction.writes.length > 0) return false;
         }
 
-        if (expr instanceof Expr.Null) return;
         code.pushAddress(ast.instruction.address);
-        // console.log(expr.toString(), expr);
         code.expression(expr);
-        code.punctuation(';');
         code.popAddress();
+
+        return true;
     }
 
     private generateForLoop(ast: nodes.ForLoopNode, code: CodeBuilder): void {
-        const decomp = Decompiler.get();
-
-        const ivar = decomp.vars.getVariableWithVersion(
-            ast.inductionVariable.register,
-            ast.inductionVariable.initVersion
-        );
-
         code.pushAddress(ast.condition.instruction.address);
         code.keyword('for');
         code.whitespace(1);
         code.punctuation('(');
 
-        if (ast.init.type === nodes.NodeType.Statement && ast.init.statement.type === nodes.NodeType.Expression) {
-            if (ivar) {
-                let expr: Expr.Expression | null = ast.init.statement.expressionGen();
-                if (expr instanceof Expr.Null) {
-                    expr = decomp.ssa.getValueForVersion(
-                        ast.inductionVariable.register,
-                        ast.inductionVariable.initVersion
-                    );
-                }
-
-                if (expr) {
-                    code.pushAddress(ast.init.statement.instruction.address);
-                    code.dataType(ivar.type);
-                    code.whitespace(1);
-                    code.variable(ivar);
-                    code.whitespace(1);
-                    code.punctuation('=');
-                    code.whitespace(1);
-                    code.expression(expr);
-                    code.punctuation(';');
-                    code.popAddress();
-                }
-            } else {
-                code.pushAddress(ast.init.statement.instruction.address);
-                code.expression(ast.init.statement.expressionGen());
-                code.punctuation(';');
-                code.popAddress();
-            }
-        } else {
-            code.comment('/* init expr not found */');
-            code.punctuation(';');
-        }
+        if (ast.init) {
+            if (ast.inductionVariable.variable) ast.inductionVariable.variable.hasDeclaration = false;
+            this.generate(ast.init.statement, code);
+        } else code.punctuation(';');
 
         code.whitespace(1);
         this.generateCondition(ast.condition.expressionGen(), code);
         code.punctuation(';');
         code.whitespace(1);
 
-        if (ast.step.type === nodes.NodeType.Statement && ast.step.statement.type === nodes.NodeType.Expression) {
-            code.pushAddress(ast.step.statement.instruction.address);
-            let didMinify = false;
-            if (ivar) {
-                let expr: Expr.Expression | null = ast.step.statement.expressionGen();
-                if (expr instanceof Expr.Null) {
-                    expr = decomp.ssa.getValueForVersion(
-                        ast.inductionVariable.register,
-                        ast.inductionVariable.stepVersion
-                    );
-                }
-
-                if (expr) {
-                    if (expr instanceof Expr.Add) {
-                        if (expr.lhs instanceof Expr.Variable && expr.lhs.value === ivar) {
-                            if (expr.rhs instanceof Expr.Imm) {
-                                const type = expr.rhs.type as PrimitiveType;
-                                if (type.isFloatingPoint && expr.rhs.toF32() === 1.0) {
-                                    code.variable(ivar);
-                                    code.punctuation('++');
-                                    didMinify = true;
-                                } else if (!type.isFloatingPoint && expr.rhs.value === 1n) {
-                                    code.variable(ivar);
-                                    code.punctuation('++');
-                                    didMinify = true;
-                                } else if (type.isFloatingPoint && expr.rhs.toF32() === -1.0) {
-                                    code.variable(ivar);
-                                    code.punctuation('--');
-                                    didMinify = true;
-                                } else if (!type.isFloatingPoint && expr.rhs.value === -1n) {
-                                    code.variable(ivar);
-                                    code.punctuation('--');
-                                    didMinify = true;
-                                }
-                            }
-
-                            if (!didMinify) {
-                                code.variable(ivar);
-                                code.whitespace(1);
-                                code.punctuation('+=');
-                                code.whitespace(1);
-                                code.expression(expr.rhs);
-                                didMinify = true;
-                            }
-                        }
-                    } else if (expr instanceof Expr.Sub) {
-                        if (expr.lhs instanceof Expr.Variable && expr.lhs.value === ivar) {
-                            if (expr.rhs instanceof Expr.Imm) {
-                                const type = expr.rhs.type as PrimitiveType;
-                                if (type.isFloatingPoint && expr.rhs.toF32() === 1.0) {
-                                    code.variable(ivar);
-                                    code.punctuation('--');
-                                    didMinify = true;
-                                } else if (!type.isFloatingPoint && expr.rhs.value === 1n) {
-                                    code.variable(ivar);
-                                    code.punctuation('--');
-                                    didMinify = true;
-                                }
-                            }
-
-                            if (!didMinify) {
-                                code.variable(ivar);
-                                code.whitespace(1);
-                                code.punctuation('-=');
-                                code.whitespace(1);
-                                code.expression(expr.rhs);
-                                didMinify = true;
-                            }
-                        }
-                    }
-
-                    if (!didMinify) {
-                        code.variable(ivar);
-                        code.whitespace(1);
-                        code.punctuation('=');
-                        code.whitespace(1);
-                        code.expression(expr);
-                        didMinify = true;
-                    }
-                }
-            }
-
-            if (!didMinify) code.expression(ast.step.statement.expressionGen());
-            code.popAddress();
-        }
+        if (ast.step) this.generateExpression(ast.step, code);
 
         code.punctuation(')');
         code.whitespace(1);
@@ -826,11 +799,7 @@ export class SSAControlFlowAnalyzer {
 
             if (stmt.statement.type === nodes.NodeType.Expression) {
                 if (stmt.statement.instruction === ast.condition.instruction) return;
-                if (
-                    ast.step.statement.type === nodes.NodeType.Expression &&
-                    stmt.statement.instruction === ast.step.statement.instruction
-                )
-                    return;
+                if (ast.step && stmt.statement.instruction === ast.step.instruction) return;
                 this.generateExpression(stmt.statement, code);
             } else this.generate(stmt.statement, code);
 
@@ -839,6 +808,133 @@ export class SSAControlFlowAnalyzer {
 
         code.unindent();
         code.newLine();
+        code.punctuation('}');
+        code.popAddress();
+    }
+
+    private generateIfElse(ast: nodes.IfElseNode, code: CodeBuilder): void {
+        const thenIsEmpty = !ast.thenBody.statements.some(
+            stmt => stmt.statement.type !== nodes.NodeType.Expression || !stmt.statement.omit
+        );
+        const elseIsEmpty = !ast.elseBody.statements.some(
+            stmt => stmt.statement.type !== nodes.NodeType.Expression || !stmt.statement.omit
+        );
+
+        if (thenIsEmpty && elseIsEmpty) {
+            code.pushAddress(ast.condition.instruction.address);
+            code.comment('// Empty if-else');
+            code.popAddress();
+            code.newLine();
+
+            // still need to run the expression generators
+            ast.thenBody.statements.forEach(stmt => {
+                if (stmt.statement.type === nodes.NodeType.Expression) {
+                    stmt.statement.expressionGen();
+                }
+            });
+            ast.elseBody.statements.forEach(stmt => {
+                if (stmt.statement.type === nodes.NodeType.Expression) {
+                    stmt.statement.expressionGen();
+                }
+            });
+            return;
+        }
+
+        if (elseIsEmpty) {
+            code.pushAddress(ast.condition.instruction.address);
+            code.keyword('if');
+            code.whitespace(1);
+            code.punctuation('(');
+            this.generateCondition(ast.condition.expressionGen(), code);
+            code.punctuation(')');
+            code.whitespace(1);
+            code.punctuation('{');
+            code.popAddress();
+
+            code.indent();
+            code.newLine();
+            this.generate(ast.thenBody, code);
+            code.unindent();
+            code.newLine();
+
+            code.pushAddress(ast.condition.instruction.address);
+            code.punctuation('}');
+            code.popAddress();
+
+            // still need to run the expression generators
+            ast.elseBody.statements.forEach(stmt => {
+                if (stmt.statement.type === nodes.NodeType.Expression) {
+                    stmt.statement.expressionGen();
+                }
+            });
+            return;
+        }
+
+        if (thenIsEmpty) {
+            // If block with inverted condition
+
+            // still need to run the expression generators
+            ast.thenBody.statements.forEach(stmt => {
+                if (stmt.statement.type === nodes.NodeType.Expression) {
+                    stmt.statement.expressionGen();
+                }
+            });
+
+            let cond = ast.condition.expressionGen();
+
+            code.pushAddress(ast.condition.instruction.address);
+            code.keyword('if');
+            code.whitespace(1);
+            code.punctuation('(');
+            this.generateCondition(cond, code, true);
+            code.punctuation(')');
+            code.whitespace(1);
+            code.punctuation('{');
+            code.popAddress();
+
+            code.indent();
+            code.newLine();
+            this.generate(ast.elseBody, code);
+            code.unindent();
+            code.newLine();
+
+            code.pushAddress(ast.condition.instruction.address);
+            code.punctuation('}');
+            code.popAddress();
+            return;
+        }
+
+        code.pushAddress(ast.condition.instruction.address);
+        code.keyword('if');
+        code.whitespace(1);
+        code.punctuation('(');
+        this.generateCondition(ast.condition.expressionGen(), code);
+        code.punctuation(')');
+        code.whitespace(1);
+        code.punctuation('{');
+        code.popAddress();
+
+        code.indent();
+        code.newLine();
+        this.generate(ast.thenBody, code);
+        code.unindent();
+        code.newLine();
+
+        code.pushAddress(ast.condition.instruction.address);
+        code.punctuation('}');
+        code.whitespace(1);
+        code.keyword('else');
+        code.whitespace(1);
+        code.punctuation('{');
+        code.popAddress();
+
+        code.indent();
+        code.newLine();
+        this.generate(ast.elseBody, code);
+        code.unindent();
+        code.newLine();
+
+        code.pushAddress(ast.condition.instruction.address);
         code.punctuation('}');
         code.popAddress();
     }

@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { extractBits } from '../utils';
@@ -24,8 +25,8 @@ export class pabsh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const v = decomp.getRegister(this.reads[0]);
 
         const elems: Expr.Expression[] = [];
@@ -40,7 +41,7 @@ export class pabsh extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -64,8 +65,8 @@ export class pabsw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const v = decomp.getRegister(this.reads[0]);
 
         const elems: Expr.Expression[] = [];
@@ -80,7 +81,7 @@ export class pabsw extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -105,8 +106,8 @@ export class paddub extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -132,7 +133,7 @@ export class paddub extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -157,8 +158,8 @@ export class padduh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -184,7 +185,7 @@ export class padduh extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -209,8 +210,8 @@ export class padduw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -237,7 +238,7 @@ export class padduw extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -262,8 +263,8 @@ export class padsbh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -298,7 +299,7 @@ export class padsbh extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -323,8 +324,8 @@ export class pceqb extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -346,7 +347,7 @@ export class pceqb extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -371,8 +372,8 @@ export class pceqh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -394,7 +395,7 @@ export class pceqh extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -419,8 +420,8 @@ export class pceqw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = decomp.getRegister(this.reads[1]);
 
@@ -442,7 +443,7 @@ export class pceqw extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -467,8 +468,8 @@ export class pextub extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const a = decomp.getRegister(this.reads[0]);
         const b = decomp.getRegister(this.reads[1]);
 
@@ -486,7 +487,7 @@ export class pextub extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -511,8 +512,8 @@ export class pextuh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const a = decomp.getRegister(this.reads[0]);
         const b = decomp.getRegister(this.reads[1]);
 
@@ -530,7 +531,7 @@ export class pextuh extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -555,8 +556,8 @@ export class pextuw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const a = decomp.getRegister(this.reads[0]);
         const b = decomp.getRegister(this.reads[1]);
 
@@ -574,7 +575,7 @@ export class pextuw extends Instruction {
 
         decomp.setRegister(this.writes[0], finalValue);
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -599,7 +600,7 @@ export class pminh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pminh not implemented');
     }
 }
@@ -625,7 +626,7 @@ export class pminw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('pminw not implemented');
     }
 }
@@ -651,7 +652,7 @@ export class psubub extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('psubub not implemented');
     }
 }
@@ -677,7 +678,7 @@ export class psubuh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('psubuh not implemented');
     }
 }
@@ -703,7 +704,7 @@ export class psubuw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('psubuw not implemented');
     }
 }
@@ -729,7 +730,7 @@ export class qfsrv extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
+    protected createExpression(): Expr.Expression | null {
         return new Expr.RawString('qfsrv not implemented');
     }
 }

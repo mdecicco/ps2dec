@@ -53,7 +53,7 @@ export function test() {
         { address: 0x00282840, code: 0x27bd0040 }
     ];
 
-    const decompiler = Decompiler.get();
+    const decompiler = Decompiler.current;
     const ts = TypeSystem.get();
     ts.initialize();
 

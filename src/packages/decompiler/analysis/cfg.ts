@@ -1,6 +1,5 @@
-import { i } from 'decoder';
+import { i, Op, Reg } from 'decoder';
 import { Decompiler } from '../decompiler';
-import { findBlockBoundaries } from './blocks';
 
 export class BasicBlock {
     cfg: ControlFlowGraph;
@@ -29,10 +28,21 @@ export class BasicBlock {
     private findBranchInstruction(): void {
         for (let i = this.instructions.length - 1; i >= 0; i--) {
             const instr = this.instructions[i];
-            if (instr.isBranch && !instr.isUnconditionalBranch) {
-                this.branchInstruction = instr;
-                return;
+            if (!instr.isBranch) continue;
+
+            const target = instr.operands[instr.operands.length - 1];
+            if (typeof target !== 'number') {
+                // Indirect branch, likely a call
+                continue;
             }
+
+            if (target < this.cfg.rangeStart || target > this.cfg.rangeEnd) {
+                // Target is another function, not control flow within this function
+                continue;
+            }
+
+            this.branchInstruction = instr;
+            return;
         }
     }
 
@@ -68,15 +78,6 @@ export class BasicBlock {
         for (let i = 0; i < this.instructions.length; i++) {
             const instr = this.instructions[i];
 
-            if (instr.isBranch && !instr.isLikelyBranch) {
-                if (!foundStart) foundStart = this.instructions[i + 1] === startFrom;
-                if (foundStart) {
-                    const result = callback(this.instructions[i + 1]);
-                    if (result === true) return;
-                }
-                i++;
-            }
-
             if (!foundStart) foundStart = instr === startFrom;
             if (foundStart) {
                 const result = callback(instr);
@@ -96,16 +97,6 @@ export class BasicBlock {
         let foundStart = startFrom ? false : true;
         for (let i = this.instructions.length - 1; i >= 0; i--) {
             const instr = this.instructions[i];
-            const prevInstr = i > 0 ? this.instructions[i - 1] : null;
-
-            if (prevInstr && prevInstr.isBranch && !prevInstr.isLikelyBranch) {
-                if (!foundStart) foundStart = prevInstr === startFrom;
-                if (foundStart) {
-                    const result = callback(prevInstr);
-                    if (result === true) return;
-                }
-                i--;
-            }
 
             if (!foundStart) foundStart = instr === startFrom;
             if (foundStart) {
@@ -208,66 +199,176 @@ export class BasicBlock {
 }
 
 export class ControlFlowGraph {
-    private blocks: BasicBlock[] = [];
-    private entryBlock: BasicBlock | null = null;
-    private exitBlocks: BasicBlock[] = [];
-    private blockMap: Map<number, BasicBlock> = new Map();
+    private m_blocks: BasicBlock[];
+    private m_entryBlock: BasicBlock | null;
+    private m_exitBlocks: BasicBlock[];
+    private m_blockMap: Map<number, BasicBlock>;
+    private m_rangeStart: number;
+    private m_rangeEnd: number;
 
-    private constructor() {}
+    private constructor() {
+        this.m_blocks = [];
+        this.m_entryBlock = null;
+        this.m_exitBlocks = [];
+        this.m_blockMap = new Map();
+        this.m_rangeStart = 0;
+        this.m_rangeEnd = 0;
+    }
+
+    /**
+     * Get the start address of the control flow graph
+     */
+    get rangeStart(): number {
+        return this.m_rangeStart;
+    }
+
+    /**
+     * Get the end address of the control flow graph
+     */
+    get rangeEnd(): number {
+        return this.m_rangeEnd;
+    }
 
     /**
      * Get the entry point of the control flow graph
      */
     getEntryBlock(): BasicBlock | null {
-        return this.entryBlock;
+        return this.m_entryBlock;
     }
 
     /**
      * Get all exit points from the control flow graph
      */
     getExitBlocks(): BasicBlock[] {
-        return [...this.exitBlocks];
+        return [...this.m_exitBlocks];
     }
 
     /**
      * Get all basic blocks in the graph
      */
     getAllBlocks(): BasicBlock[] {
-        return [...this.blocks];
+        return [...this.m_blocks];
     }
 
     getBlock(address: number): BasicBlock | null {
-        return this.blockMap.get(address) || null;
+        return this.m_blockMap.get(address) || null;
     }
 
-    private static createBasicBlocks(
-        input: i.Instruction[],
-        boundaries: Set<number>,
-        cfg: ControlFlowGraph
-    ): BasicBlock[] {
+    private static createBasicBlocks(input: i.Instruction[], cfg: ControlFlowGraph): BasicBlock[] {
         const blocks: BasicBlock[] = [];
-        const boundaryAddresses = Array.from(boundaries).sort((a, b) => a - b);
 
-        const decomp = Decompiler.get();
+        // First instruction always starts a block
+        let currentBlock = {
+            instructions: [] as i.Instruction[],
+            startAddress: cfg.rangeStart,
+            endAddress: cfg.rangeStart
+        };
 
-        // Create blocks between each boundary
-        for (let i = 0; i < boundaryAddresses.length; i++) {
-            const startAddress = boundaryAddresses[i];
-            const endAddress = boundaryAddresses[i + 1] ?? Infinity;
+        const branchTargets = new Set<number>();
+        for (const instr of input) {
+            if (!instr.isBranch) continue;
 
-            // Find all instructions in this range
-            const instructions = input.filter(instr => instr.address >= startAddress && instr.address < endAddress);
+            const target = instr.operands[instr.operands.length - 1];
+            if (typeof target !== 'number') continue;
 
-            if (instructions.length > 0) {
-                const block = new BasicBlock(
-                    cfg,
-                    startAddress,
-                    instructions[instructions.length - 1].address,
-                    instructions
-                );
-                blocks.push(block);
-                instructions.forEach(instr => cfg.blockMap.set(instr.address, block));
+            branchTargets.add(target);
+        }
+
+        for (let idx = 0; idx < input.length; idx++) {
+            const instr = input[idx];
+
+            if (branchTargets.has(instr.address)) {
+                // branch target, terminate block and start new one
+                if (currentBlock.instructions.length > 0) {
+                    blocks.push(
+                        new BasicBlock(cfg, currentBlock.startAddress, instr.address, currentBlock.instructions)
+                    );
+                }
+
+                currentBlock = {
+                    instructions: [],
+                    startAddress: instr.address,
+                    endAddress: instr.address
+                };
             }
+
+            if (!instr.isBranch) {
+                currentBlock.instructions.push(instr);
+                currentBlock.endAddress += 4;
+                continue;
+            }
+
+            // Target will always be the last operand
+            const target = instr.operands[instr.operands.length - 1];
+
+            if (typeof target !== 'number') {
+                // Indirect branch, likely a call
+                currentBlock.instructions.push(input[idx + 1]); // Delay slot
+                currentBlock.instructions.push(instr);
+                currentBlock.endAddress += 8;
+                idx++; // Don't add the delay slot again
+                continue;
+            }
+
+            if (target < cfg.rangeStart || target > cfg.rangeEnd) {
+                // Target is another function, not control flow within this function
+                currentBlock.instructions.push(input[idx + 1]); // Delay slot
+                currentBlock.instructions.push(instr);
+                currentBlock.endAddress += 8;
+                idx++; // Don't add the delay slot again
+                continue;
+            }
+
+            // last instruction in the current block
+
+            const delayInstr = input[idx + 1];
+
+            if (!delayInstr) {
+                console.log(`No delay slot @ ${instr.toString(true)}`);
+            }
+
+            if (instr.isLikelyBranch) {
+                // Delay slot belongs only to one path from here, so it must
+                // be in its own block
+
+                currentBlock.instructions.push(instr);
+                currentBlock.endAddress += 4;
+
+                blocks.push(
+                    new BasicBlock(cfg, currentBlock.startAddress, currentBlock.endAddress, currentBlock.instructions)
+                );
+
+                blocks.push(new BasicBlock(cfg, delayInstr.address, delayInstr.address + 4, [delayInstr]));
+
+                currentBlock = {
+                    instructions: [],
+                    startAddress: delayInstr.address + 4,
+                    endAddress: delayInstr.address + 4
+                };
+
+                idx++; // Don't add the delay slot again
+            } else {
+                currentBlock.instructions.push(delayInstr); // Delay slot
+                currentBlock.instructions.push(instr);
+                currentBlock.endAddress += 8;
+                idx++; // Don't add the delay slot again
+
+                blocks.push(
+                    new BasicBlock(cfg, currentBlock.startAddress, currentBlock.endAddress, currentBlock.instructions)
+                );
+
+                currentBlock = {
+                    instructions: [],
+                    startAddress: currentBlock.endAddress,
+                    endAddress: currentBlock.endAddress
+                };
+            }
+        }
+
+        if (currentBlock.instructions.length > 0) {
+            blocks.push(
+                new BasicBlock(cfg, currentBlock.startAddress, currentBlock.endAddress, currentBlock.instructions)
+            );
         }
 
         return blocks;
@@ -278,59 +379,53 @@ export class ControlFlowGraph {
         const blockMap = new Map<number, BasicBlock>();
         blocks.forEach(block => blockMap.set(block.startAddress, block));
 
-        for (const block of blocks) {
-            const lastInstr = block.instructions[block.instructions.length - 1];
-            const lastAddr = block.instructions[block.instructions.length - 1].address;
+        const ignoreBlocks = new Set<BasicBlock>();
 
-            // Find the branch instruction (if any) - it will be the second-to-last instruction if present
-            let branchInstr: i.Instruction | undefined;
-            let branchAddr: number | undefined;
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            if (ignoreBlocks.has(block)) continue;
 
-            if (block.instructions.length >= 2) {
-                const secondLastInstr = block.instructions[block.instructions.length - 2];
-                if (secondLastInstr.isBranch) {
-                    branchInstr = secondLastInstr;
-                    branchAddr = secondLastInstr.address;
-                }
-            }
-
-            // If no branch was found in second-to-last position, check last position
-            if (!branchInstr && lastInstr.isBranch) {
-                branchInstr = lastInstr;
-                branchAddr = lastAddr;
-            }
-
-            if (branchInstr) {
+            if (block.branchInstruction) {
                 // For conditional branches, add both paths
                 // Target will always be the last operand
-                const target = branchInstr.operands[branchInstr.operands.length - 1] as number;
+                const target = block.branchInstruction.operands[block.branchInstruction.operands.length - 1] as number;
                 const targetBlock = blockMap.get(target);
+                let nextBlockIdx = i + 1;
+
                 if (targetBlock) {
-                    block.successors.push(targetBlock);
-                    targetBlock.predecessors.push(block);
+                    if (block.branchInstruction.isLikelyBranch) {
+                        // Have to flow to delay slot block first
+                        const delaySlotBlock = blockMap.get(block.branchInstruction.address + 4);
+                        if (delaySlotBlock) {
+                            block.successors.push(delaySlotBlock);
+                            delaySlotBlock.predecessors.push(block);
+                            delaySlotBlock.successors.push(targetBlock);
+                            ignoreBlocks.add(delaySlotBlock);
+
+                            // Fallthrough path must not include the delay slot block
+                            nextBlockIdx++;
+                        } else {
+                            throw new Error('Delay slot block not found');
+                        }
+                    } else {
+                        // Just flow to target block
+                        block.successors.push(targetBlock);
+                        targetBlock.predecessors.push(block);
+                    }
                 }
 
                 // Add fall-through path for non-unconditional branches
-                if (!i.j.is(branchInstr) && !i.b.is(branchInstr)) {
+                if (!block.branchInstruction.isUnconditionalBranch) {
                     // Fall through to the next block after the delay slot
-                    const nextAddr = lastAddr + 4;
-                    const nextBlock = blockMap.get(nextAddr);
-                    if (nextBlock) {
-                        block.successors.push(nextBlock);
-                        nextBlock.predecessors.push(block);
+                    if (nextBlockIdx < blocks.length) {
+                        block.successors.push(blocks[nextBlockIdx]);
+                        blocks[nextBlockIdx].predecessors.push(block);
                     }
                 }
-            } else if (i.jr.is(lastInstr)) {
-                // JR is special as we can't statically determine its target
-                // Don't add any successors
-            } else {
+            } else if (i < blocks.length - 1) {
                 // For non-branch instructions, fall through to the next block
-                const nextAddr = lastAddr + 4;
-                const nextBlock = blockMap.get(nextAddr);
-                if (nextBlock) {
-                    block.successors.push(nextBlock);
-                    nextBlock.predecessors.push(block);
-                }
+                block.successors.push(blocks[i + 1]);
+                blocks[i + 1].predecessors.push(block);
             }
         }
     }
@@ -338,21 +433,35 @@ export class ControlFlowGraph {
     static build(input: i.Instruction[]): ControlFlowGraph {
         const graph = new ControlFlowGraph();
 
-        // 1. First pass: Identify basic block boundaries
-        const boundaries = findBlockBoundaries(input);
+        graph.m_rangeStart = input[0].address;
+        graph.m_rangeEnd = graph.m_rangeEnd;
 
-        // 2. Second pass: Create basic blocks
-        graph.blocks = this.createBasicBlocks(input, boundaries, graph);
+        for (const instr of input) {
+            const addr = instr.address;
+            if (addr < graph.m_rangeStart) graph.m_rangeStart = addr;
+            if (addr > graph.m_rangeEnd) graph.m_rangeEnd = addr;
+        }
 
-        // 3. Third pass: Link blocks together
-        this.linkBlocks(graph.blocks);
+        graph.m_blocks = ControlFlowGraph.createBasicBlocks(input, graph);
 
-        // 4. Fourth pass: Identify entry/exit points
-        if (graph.blocks.length > 0) {
-            graph.entryBlock = graph.blocks[0];
-            graph.exitBlocks = graph.blocks.filter(
-                block => block.successors.length === 0 || i.jr.is(block.instructions[block.instructions.length - 1])
-            );
+        graph.m_blocks.forEach(block => {
+            block.instructions.forEach(instr => {
+                graph.m_blockMap.set(instr.address, block);
+            });
+        });
+
+        ControlFlowGraph.linkBlocks(graph.m_blocks);
+
+        if (graph.m_blocks.length > 0) {
+            graph.m_entryBlock = graph.m_blocks[0];
+            graph.m_exitBlocks = graph.m_blocks.filter(block => {
+                if (block.successors.length === 0) return true;
+                const lastInstr = block.instructions[block.instructions.length - 1];
+                if (lastInstr.code !== Op.Code.jr) return false;
+
+                // Returns from function
+                return Reg.compare(lastInstr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA });
+            });
         }
 
         return graph;
@@ -363,7 +472,7 @@ export class ControlFlowGraph {
         const blockInfo = new Map<BasicBlock, { index: number; height: number }>();
         let currentLine = 0;
 
-        this.blocks.forEach((block, blockIndex) => {
+        this.m_blocks.forEach((block, blockIndex) => {
             // Each block needs: address line + instructions + blank line
             const height = 2 + block.instructions.length;
             blockInfo.set(block, { index: blockIndex, height });
@@ -374,22 +483,17 @@ export class ControlFlowGraph {
         const output: string[] = [];
         currentLine = 0;
 
-        this.blocks.forEach((block, blockIndex) => {
+        this.m_blocks.forEach((block, blockIndex) => {
             const info = blockInfo.get(block)!;
             const blockStart = currentLine;
 
             // Block header with address range
-            output.push(
-                `Block ${blockIndex}: 0x${block.startAddress.toString(16).padStart(8, '0')} - 0x${block.endAddress
-                    .toString(16)
-                    .padStart(8, '0')}`
-            );
+            output.push(`Block ${blockIndex}: ${block.startAddressHex} - ${block.endAddressHex}`);
 
-            const decomp = Decompiler.get();
+            const decomp = Decompiler.current;
 
             // Instructions
             block.instructions.forEach(instr => {
-                if (decomp.isAddressIgnored(instr.address)) return;
                 output.push(`    0x${instr.address.toString(16).padStart(8, '0')}: ${instr}`);
             });
 
@@ -413,7 +517,7 @@ export class ControlFlowGraph {
         // Print summary
         console.log('\nSummary:');
         console.log('========');
-        console.log(`Entry block: Block ${blockInfo.get(this.entryBlock!)?.index}`);
-        console.log(`Exit blocks: ${this.exitBlocks.map(b => `Block ${blockInfo.get(b)?.index}`).join(', ')}`);
+        console.log(`Entry block: Block ${blockInfo.get(this.m_entryBlock!)?.index}`);
+        console.log(`Exit blocks: ${this.m_exitBlocks.map(b => `Block ${blockInfo.get(b)?.index}`).join(', ')}`);
     }
 }

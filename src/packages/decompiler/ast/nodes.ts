@@ -1,6 +1,6 @@
-import { i } from 'decoder';
+import { Expr, i } from 'decoder';
+import { DecompVariable } from 'packages/decompiler/analysis';
 import { InductionVariable } from '../analysis/flow_loops';
-import { Expression } from '../expr';
 
 export enum NodeType {
     Block = 'Block',
@@ -10,7 +10,8 @@ export enum NodeType {
     DoWhileLoop = 'DoWhileLoop',
     If = 'If',
     IfElse = 'IfElse',
-    Expression = 'Expression'
+    Expression = 'Expression',
+    VariableDeclaration = 'VariableDeclaration'
 }
 
 export interface ASTNode {
@@ -20,7 +21,7 @@ export interface ASTNode {
 
 export interface ExpressionNode extends ASTNode {
     type: NodeType.Expression;
-    expressionGen: () => Expression;
+    expressionGen: () => Expr.Expression | null;
     instruction: i.Instruction;
     omit: boolean;
 }
@@ -37,9 +38,9 @@ export interface StatementNode extends ASTNode {
 
 export interface ForLoopNode extends ASTNode {
     type: NodeType.ForLoop;
-    init: StatementNode;
+    init: StatementNode | null;
     condition: ExpressionNode;
-    step: StatementNode;
+    step: ExpressionNode | null;
     body: BlockNode;
     inductionVariable: InductionVariable;
 }
@@ -69,7 +70,20 @@ export interface IfElseNode extends ASTNode {
     elseBody: BlockNode;
 }
 
-export type Statement = ExpressionNode | ForLoopNode | WhileLoopNode | DoWhileLoopNode | IfNode | IfElseNode;
+export interface VariableDeclarationNode extends ASTNode {
+    type: NodeType.VariableDeclaration;
+    variable: DecompVariable;
+    initializer: ExpressionNode | null;
+}
+
+export type Statement =
+    | ExpressionNode
+    | ForLoopNode
+    | WhileLoopNode
+    | DoWhileLoopNode
+    | IfNode
+    | IfElseNode
+    | VariableDeclarationNode;
 export type Node =
     | ExpressionNode
     | BlockNode
@@ -78,4 +92,5 @@ export type Node =
     | WhileLoopNode
     | DoWhileLoopNode
     | IfNode
-    | IfElseNode;
+    | IfElseNode
+    | VariableDeclarationNode;

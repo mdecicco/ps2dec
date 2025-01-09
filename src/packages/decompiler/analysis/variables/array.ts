@@ -1,6 +1,6 @@
+import { Expr } from 'decoder';
 import * as nodes from '../../ast/nodes';
 import { Decompiler } from '../../decompiler';
-import * as Expr from '../../expr/base';
 import { DataType, PrimitiveType } from '../../typesys';
 import { ASTAnalyzerPlugin } from '../ast_plugin';
 
@@ -55,18 +55,14 @@ export class ArrayAccessAnalyzer extends ASTAnalyzerPlugin {
             return false;
         }
 
-        const existingVariable = Decompiler.get().vars.getVariableWithVersion(
-            info.indexLocation.value,
-            info.indexLocation.version
-        );
+        const existingVariable = Decompiler.current.vars.getVariable(info.indexLocation);
         if (existingVariable) {
             // Already a variable, nothing to do
             return false;
         }
 
         // bingo
-        const decomp = Decompiler.get();
-        const index = decomp.promoteVersionToVariable(info.indexLocation);
+        const index = Decompiler.current.promote(info.indexLocation);
         if (!(index.type instanceof PrimitiveType) || index.type.name.includes('undefined')) {
             index.type = 'i32';
         }

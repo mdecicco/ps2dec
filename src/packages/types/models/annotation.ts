@@ -9,6 +9,7 @@ export interface RawByteAnnotation extends AnnotationBase {
 
 export interface InstructionAnnotation extends AnnotationBase {
     type: 'instruction';
+    isDelaySlot: boolean;
 }
 
 export interface DataAnnotation extends AnnotationBase {

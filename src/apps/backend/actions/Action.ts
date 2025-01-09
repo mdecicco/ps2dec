@@ -85,6 +85,7 @@ export abstract class Action extends EventProducer<ActionEventMap> {
             } else {
                 action.dispatch('executeFailed', String(error));
             }
+            console.error(error);
         }
 
         action.dispatch('afterExecute');
@@ -98,6 +99,7 @@ export abstract class Action extends EventProducer<ActionEventMap> {
             action.dispatch('revertComplete');
         } catch (error) {
             action.dispatch('revertFailed', String(error));
+            console.error(error);
         }
 
         action.dispatch('afterRevert');

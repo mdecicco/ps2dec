@@ -1,6 +1,6 @@
-import { i } from 'decoder';
+import { Expr, i } from 'decoder';
+import { DecompVariable } from 'packages/decompiler/analysis';
 import { InductionVariable } from '../analysis/flow_loops';
-import { Expression } from '../expr';
 import * as nodes from './nodes';
 
 export class ASTBuilder {
@@ -18,7 +18,11 @@ export class ASTBuilder {
     /**
      * Create an expression node from an expression
      */
-    createExpression(instruction: i.Instruction, omit: boolean, expressionGen: () => Expression): nodes.ExpressionNode {
+    createExpression(
+        instruction: i.Instruction,
+        omit: boolean,
+        expressionGen: () => Expr.Expression | null
+    ): nodes.ExpressionNode {
         return {
             type: nodes.NodeType.Expression,
             parent: null,
@@ -40,12 +44,27 @@ export class ASTBuilder {
     }
 
     /**
+     * Create a variable declaration node
+     */
+    createVariableDeclaration(
+        variable: DecompVariable,
+        initializer: nodes.ExpressionNode | null
+    ): nodes.VariableDeclarationNode {
+        return {
+            type: nodes.NodeType.VariableDeclaration,
+            parent: null,
+            variable,
+            initializer
+        };
+    }
+
+    /**
      * Create a for loop node
      */
     createForLoop(
-        init: nodes.StatementNode,
+        init: nodes.StatementNode | null,
         condition: nodes.ExpressionNode,
-        step: nodes.StatementNode,
+        step: nodes.ExpressionNode | null,
         body: nodes.BlockNode,
         inductionVariable: InductionVariable
     ): nodes.ForLoopNode {
@@ -59,8 +78,8 @@ export class ASTBuilder {
             inductionVariable
         };
 
-        init.parent = node;
-        step.parent = node;
+        if (init) init.parent = node;
+        if (step) step.parent = node;
         body.parent = node;
 
         return node;

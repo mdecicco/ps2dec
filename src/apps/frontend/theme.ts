@@ -10,5 +10,8 @@ export const darkTheme = createTheme({
         primary: {
             main: '#007acc'
         }
+    },
+    typography: {
+        fontFamily: `Roboto, Helvetica, Arial, sans-serif`
     }
 });

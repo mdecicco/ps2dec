@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { branchTarget, extractBits, extractSignedBits } from '../utils';
@@ -25,8 +26,8 @@ export class bc0f extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.Not(decomp.getRegister(this.reads[0]));
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number);
         return expr;
@@ -55,8 +56,8 @@ export class bc0fl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = new Expr.Not(decomp.getRegister(this.reads[0]));
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number, true);
         return expr;
@@ -84,8 +85,8 @@ export class bc0t extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = decomp.getRegister(this.reads[0]);
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number);
         return expr;
@@ -114,8 +115,8 @@ export class bc0tl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const cond = decomp.getRegister(this.reads[0]);
         const expr = new Expr.ConditionalBranch(cond, this.operands[0] as number, true);
         return expr;
@@ -142,8 +143,8 @@ export class di extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        return null;
     }
 }
 
@@ -167,8 +168,8 @@ export class ei extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        return null;
     }
 }
 
@@ -195,8 +196,8 @@ export class eret extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        return null;
     }
 }
 
@@ -220,10 +221,10 @@ export class mfc0 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -247,9 +248,9 @@ export class mtc0 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         decomp.setRegister(this.writes[0], decomp.getRegister(this.reads[0]));
-        return new Expr.Null();
+        return null;
     }
 }

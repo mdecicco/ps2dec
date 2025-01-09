@@ -1,8 +1,7 @@
 import { i } from 'decoder';
 import * as nodes from '../ast/nodes';
+import { FunctionCode } from '../input';
 import { ControlFlowGraph } from './cfg';
-import { SSAForm } from './ssa';
-import { VariableDB } from './vardb';
 
 export interface IASTAnalyzerPlugin {
     /**
@@ -13,14 +12,12 @@ export interface IASTAnalyzerPlugin {
 }
 
 export abstract class ASTAnalyzerPlugin implements IASTAnalyzerPlugin {
-    protected m_ssa: SSAForm;
-    protected m_vardb: VariableDB;
+    protected m_func: FunctionCode;
     protected m_cfg: ControlFlowGraph;
 
-    constructor(ssa: SSAForm, vardb: VariableDB, cfg: ControlFlowGraph) {
-        this.m_ssa = ssa;
-        this.m_vardb = vardb;
-        this.m_cfg = cfg;
+    constructor(func: FunctionCode) {
+        this.m_func = func;
+        this.m_cfg = func.cfg;
     }
 
     analyzeRoot(ast: nodes.Node): boolean {
@@ -87,8 +84,8 @@ export abstract class ASTAnalyzerPlugin implements IASTAnalyzerPlugin {
 
     analyzeForLoop(ast: nodes.ForLoopNode) {
         let changed = false;
-        changed ||= this.analyze(ast.init);
-        changed ||= this.analyze(ast.step);
+        if (ast.init) changed ||= this.analyze(ast.init);
+        if (ast.step) changed ||= this.analyze(ast.step);
         changed ||= this.analyze(ast.body);
         return changed;
     }
@@ -141,11 +138,7 @@ export abstract class ASTAnalyzerPlugin implements IASTAnalyzerPlugin {
                 instructions.push(
                     ...this.collectInstructions(ast.body).filter(instr => {
                         if (instr === ast.condition.instruction) return false;
-                        if (
-                            ast.step.statement.type === nodes.NodeType.Expression &&
-                            instr === ast.step.statement.instruction
-                        )
-                            return false;
+                        if (ast.step && instr === ast.step.instruction) return false;
                         return true;
                     })
                 );

@@ -1,50 +1,20 @@
+import { MemContext } from 'apps/frontend/context';
 import Messager from 'apps/frontend/message';
-import { MemoryRegionModel } from 'packages/types';
 import React from 'react';
 
 export function useMemory() {
-    const [loading, setLoading] = React.useState(false);
-    const [memoryRegions, setMemoryRegions] = React.useState<MemoryRegionModel[]>([]);
+    const memory = React.useContext(MemContext);
     const loadElf = () => {
         Messager.send('promptLoadElf');
     };
 
-    const loadMemoryRegions = async () => {
-        setLoading(true);
-        const regions = await Messager.invoke('getMemoryRegions');
-        setMemoryRegions(regions);
-        setLoading(false);
-    };
-
-    React.useEffect(() => {
-        const unbind: (() => void)[] = [
-            Messager.on('setMemoryRegions', data => {
-                setMemoryRegions(data.regions);
-                setLoading(false);
-            }),
-            Messager.on('memoryRegionAdded', region => {
-                setMemoryRegions([...memoryRegions, region]);
-            }),
-            Messager.on('memoryRegionRemoved', data => {
-                setMemoryRegions(memoryRegions.filter(region => region.id !== data.id));
-            })
-        ];
-
-        if (!loading) loadMemoryRegions();
-
-        return () => {
-            unbind.forEach(fn => fn());
-        };
-    }, []);
-
-    const readBytes = (address: number, count: number) => {
-        return Messager.invoke('readBytes', { address, count });
-    };
-
     return {
-        memoryRegions,
-        loading,
+        memoryRegions: memory.regions,
+        loading: memory.loadingRegions,
         loadElf,
-        readBytes
+        read8: memory.read8,
+        read16: memory.read16,
+        read32: memory.read32,
+        getInstructionAtAddress: memory.getInstructionAtAddress
     };
 }

@@ -1,7 +1,7 @@
 import { i, Op, Reg } from 'decoder';
-import { SSADef, SSAForm } from '../analysis/ssa';
-import { Value } from '../value';
-import { BasicBlock, ControlFlowGraph } from './cfg';
+import { DecompVariable } from 'decompiler';
+import { FunctionCode, LocationDef } from '../input';
+import { BasicBlock } from './cfg';
 import { DominatorInfo } from './dominators';
 
 export enum LoopType {
@@ -13,11 +13,11 @@ export enum LoopType {
 
 export interface InductionVariable {
     register: Reg.Register;
-    initVersion: number; // SSA version at initialization
-    initInstruction: i.Instruction;
-    stepVersion: number; // SSA version after increment/decrement
+    initVersion: number;
+    initInstruction: i.Instruction | null;
+    stepVersion: number;
     stepInstruction: i.Instruction;
-    variable: Value | null;
+    variable: DecompVariable | null;
 }
 
 export interface LoopCondition {
@@ -36,23 +36,21 @@ export interface Loop {
     condition: LoopCondition;
 }
 
-export class SSALoopAnalyzer {
-    private m_cfg: ControlFlowGraph;
+export class LoopAnalyzer {
+    private m_func: FunctionCode;
     private m_dominators: DominatorInfo;
-    private m_ssa: SSAForm;
     private m_loops: Loop[] = [];
 
-    constructor(cfg: ControlFlowGraph, dominators: DominatorInfo, ssa: SSAForm) {
-        this.m_cfg = cfg;
-        this.m_dominators = dominators;
-        this.m_ssa = ssa;
+    constructor(func: FunctionCode) {
+        this.m_func = func;
+        this.m_dominators = new DominatorInfo(func.cfg);
     }
 
     findLoops(): Loop[] {
         const seenBlocks = new Set<BasicBlock>();
 
         // Process each block looking for loop headers
-        for (const block of this.m_cfg.getAllBlocks()) {
+        for (const block of this.m_func.cfg.getAllBlocks()) {
             // Skip if we've already seen this block as part of another loop
             if (seenBlocks.has(block)) continue;
 
@@ -256,7 +254,7 @@ export class SSALoopAnalyzer {
             string,
             {
                 reg: Reg.Register;
-                def: SSADef; // Just need the SSA def, not the value
+                def: LocationDef;
                 distance: number;
                 stepInstruction: i.Instruction;
             }
@@ -265,10 +263,10 @@ export class SSALoopAnalyzer {
         for (const block of blocks) {
             for (const instr of block.instructions) {
                 if (instr.code === Op.Code.addiu || instr.code === Op.Code.addi) {
-                    const def = this.m_ssa.getDef(instr, instr.writes[0], false);
+                    const def = this.m_func.getDef(instr, instr.writes[0]);
                     if (!def) continue;
 
-                    const reg = def.location as Reg.Register;
+                    const reg = def.value as Reg.Register;
                     const distance = this.findDistanceToBranch(instr, branch, reg, header);
                     if (distance >= 0) {
                         const regKey = Reg.key(reg);
@@ -282,8 +280,8 @@ export class SSALoopAnalyzer {
 
         // Find candidate with shortest path to branch
         let bestReg: Reg.Register | null = null;
-        let bestDef: SSADef | null = null;
-        let bestInit: { def: SSADef; instr: i.Instruction } | null = null;
+        let bestDef: LocationDef | null = null;
+        let bestInit: LocationDef | null = null;
         let bestStep: i.Instruction | null = null;
         let shortestDistance = Infinity;
 
@@ -304,8 +302,8 @@ export class SSALoopAnalyzer {
 
         return {
             register: bestReg,
-            initVersion: bestInit.def.version,
-            initInstruction: bestInit.instr,
+            initVersion: bestInit.version,
+            initInstruction: bestInit.instruction,
             stepVersion: bestDef.version,
             stepInstruction: bestStep,
             variable: null
@@ -329,7 +327,7 @@ export class SSALoopAnalyzer {
         }
 
         // Find all instructions between from and branch that use trackReg
-        const block = this.m_cfg.getBlock(from.address)!;
+        const block = this.m_func.cfg.getBlock(from.address)!;
         let distance = 0;
         let foundPath = false;
 
@@ -363,34 +361,7 @@ export class SSALoopAnalyzer {
     /**
      * Find initialization of a register before a loop
      */
-    private findInitialization(
-        reg: Reg.Register,
-        loopHeader: BasicBlock
-    ): { def: SSADef; instr: i.Instruction } | null {
-        // First try to get initial value through phi node
-        const headerInstr = loopHeader.instructions[0];
-        const init = this.m_ssa.getInitialDef(headerInstr, reg);
-        if (init) return init;
-
-        // Fall back to walking predecessors
-        const worklist = [...loopHeader.predecessors];
-        const seen = new Set<BasicBlock>();
-
-        while (worklist.length > 0) {
-            const block = worklist.pop()!;
-            if (seen.has(block)) continue;
-            seen.add(block);
-
-            // Look for definitions in this block
-            for (const instr of block.instructions) {
-                const def = this.m_ssa.getDef(instr, reg, false);
-                if (def) return { def, instr };
-            }
-
-            // Add predecessors to worklist
-            worklist.push(...block.predecessors);
-        }
-
-        return null;
+    private findInitialization(reg: Reg.Register, loopHeader: BasicBlock): LocationDef | null {
+        return this.m_func.getDefAt(reg, loopHeader.startAddress);
     }
 }

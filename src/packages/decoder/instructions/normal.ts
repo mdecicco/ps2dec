@@ -1,4 +1,5 @@
-import { Decompiler, Expr } from 'decompiler';
+import { Decompiler } from 'decompiler';
+import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
 import { branchTarget, extractBits, extractSignedBits } from '../utils';
@@ -25,8 +26,8 @@ export class addi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.i16(this.operands[2] as number);
 
@@ -57,8 +58,8 @@ export class addiu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.i16(this.operands[2] as number);
 
@@ -89,8 +90,8 @@ export class andi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
 
@@ -123,8 +124,8 @@ export class beq extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[1] as Reg.Register);
 
@@ -158,8 +159,8 @@ export class beql extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[1] as Reg.Register);
 
@@ -191,8 +192,8 @@ export class bgtz extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -225,8 +226,8 @@ export class bgtzl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -258,8 +259,8 @@ export class blez extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -292,8 +293,8 @@ export class blezl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = Expr.Imm.i32(0);
 
@@ -326,8 +327,8 @@ export class bne extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[1] as Reg.Register);
 
@@ -361,8 +362,8 @@ export class bnel extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[0] as Reg.Register);
         const rhs = decomp.getRegister(this.operands[1] as Reg.Register);
 
@@ -393,8 +394,8 @@ export class daddi extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -425,8 +426,8 @@ export class daddiu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -457,8 +458,8 @@ export class j extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const target = Expr.Imm.u32(this.operands[0] as number);
         return new Expr.UnconditionalBranch(target);
     }
@@ -485,10 +486,10 @@ export class jal extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const targetAddr = this.operands[0] as number;
-        const target = decomp.funcDb.findFunctionByAddress(targetAddr);
+        const target = Decompiler.findFunctionByAddress(targetAddr);
         const returnAddress = Expr.Imm.u32(this.address + 8);
         decomp.setRegister(this.writes[0], returnAddress);
 
@@ -501,7 +502,7 @@ export class jal extends Instruction {
             decomp.setStack(target.returnLocation.offset, call);
         }
 
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -528,8 +529,8 @@ export class lb extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -562,8 +563,8 @@ export class lbu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -596,8 +597,8 @@ export class ld extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -630,8 +631,8 @@ export class ldl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const dest = this.writes[0];
         const mem = this.operands[1] as Op.MemOperand;
 
@@ -684,8 +685,8 @@ export class ldr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const dest = this.writes[0];
         const mem = this.operands[1] as Op.MemOperand;
 
@@ -738,8 +739,8 @@ export class lh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -772,8 +773,8 @@ export class lhu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -803,8 +804,8 @@ export class lui extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const value = new Expr.ShiftLeft(Expr.Imm.i32(this.operands[1] as number), Expr.Imm.u32(16), 32, true);
 
         decomp.setRegister(this.writes[0], value);
@@ -836,8 +837,8 @@ export class lw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -870,8 +871,8 @@ export class lwl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const dest = this.writes[0];
         const mem = this.operands[1] as Op.MemOperand;
 
@@ -924,8 +925,8 @@ export class lwr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const dest = this.writes[0];
         const mem = this.operands[1] as Op.MemOperand;
 
@@ -978,8 +979,8 @@ export class lwu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -1010,8 +1011,8 @@ export class ori extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -1043,9 +1044,9 @@ export class pref extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
-        return new Expr.Null();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
+        return null;
     }
 }
 
@@ -1072,8 +1073,8 @@ export class sb extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
@@ -1106,8 +1107,8 @@ export class sd extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
@@ -1140,8 +1141,8 @@ export class sdl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
 
         // u32 effective_address = base_address + offset;
@@ -1190,8 +1191,8 @@ export class sdr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
 
         // u32 effective_address = base_address + offset;
@@ -1240,8 +1241,8 @@ export class sh extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
@@ -1272,8 +1273,8 @@ export class slti extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -1304,8 +1305,8 @@ export class sltiu extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -1338,8 +1339,8 @@ export class sw extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
@@ -1372,8 +1373,8 @@ export class swl extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
 
         // u32 effective_address = base_address + offset;
@@ -1422,8 +1423,8 @@ export class swr extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
 
         // u32 effective_address = base_address + offset;
@@ -1470,8 +1471,8 @@ export class xori extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.reads[0]);
         const rhs = Expr.Imm.i32(this.operands[2] as number);
 
@@ -1504,8 +1505,8 @@ export class lq extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
 
@@ -1538,8 +1539,8 @@ export class sq extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);
@@ -1572,12 +1573,12 @@ export class lwc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const addr = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset));
         decomp.setRegister(this.writes[0], new Expr.Load(addr, 4));
-        return new Expr.Null();
+        return null;
     }
 }
 
@@ -1604,8 +1605,8 @@ export class swc1 extends Instruction {
         });
     }
 
-    protected createExpression(): Expr.Expression {
-        const decomp = Decompiler.get();
+    protected createExpression(): Expr.Expression | null {
+        const decomp = Decompiler.current;
         const mem = this.operands[1] as Op.MemOperand;
         const src = decomp.getRegister(this.reads[0]);
         const dest = new Expr.Add(decomp.getRegister(mem.base), Expr.Imm.i16(mem.offset), true);

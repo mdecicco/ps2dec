@@ -25,7 +25,7 @@ export class DecompilerService {
             } catch (err) {}
         }
 
-        const decompiler = Decompiler.get();
+        const decompiler = Decompiler.current;
         const cache = new DecompilerCache(FunctionService.toTypeSystem(func));
 
         try {

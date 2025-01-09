@@ -136,9 +136,16 @@ export class DominatorInfo {
                 for (const pred of block.predecessors) {
                     // Walk up the dominator tree from predecessor
                     let runner = pred;
+                    let iterations = 0;
                     while (runner !== this.getImmediateDominator(block)) {
                         this.m_dominanceFrontier.get(runner)?.add(block);
                         runner = this.getImmediateDominator(runner) ?? runner;
+
+                        iterations++;
+                        if (iterations === 100) {
+                            cfg.debugPrint();
+                            throw new Error('probably malformed CFG');
+                        }
                     }
                 }
             }

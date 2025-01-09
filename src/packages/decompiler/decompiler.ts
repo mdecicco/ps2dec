@@ -1,57 +1,79 @@
-import { i, Op, Reg } from 'decoder';
+import { Expr, i, Op, Reg } from 'decoder';
 import { ASTAnalyzer } from './analysis/ast';
-import { ControlFlowGraph } from './analysis/cfg';
-import { DominatorInfo } from './analysis/dominators';
-import { SSAControlFlowAnalyzer } from './analysis/flow';
-import { Location, SSADefWithValue, SSAForm, VersionedLocation } from './analysis/ssa';
-import { DecompVariable, VariableDB } from './analysis/vardb';
+import { ControlFlowAnalyzer } from './analysis/flow';
+import { DecompVariable } from './analysis/vardb';
 import { CodeBuilder } from './codegen/codebuilder';
-import * as Expr from './expr';
-import { Func, Method } from './typesys';
-import { Value } from './value';
-
-type RegisterBackup = {
-    reg: Reg.Register;
-    offset: number;
-};
-
-export class DecompilerCache {
-    private m_func: Func | Method;
-    values: Value[];
-    cfg: ControlFlowGraph | null;
-    stackSize: number;
-    backedUpRegisters: RegisterBackup[];
-
-    constructor(func: Func | Method) {
-        this.m_func = func;
-        this.values = [];
-        this.cfg = null;
-        this.stackSize = 0;
-        this.backedUpRegisters = [];
-    }
-
-    get func() {
-        return this.m_func;
-    }
-}
-
-export interface IFunctionDatabase {
-    findFunctionByAddress: (address: number) => Func | Method | null;
-    findFunctionById: (id: number) => Func | Method | null;
-}
+import { Location, VersionedLocation } from './common';
+import { DecompilerCache, IDataSource } from './input';
 
 export class Decompiler {
-    private static instance: Decompiler;
+    private static m_instance: Decompiler;
+    private static m_dataSource: IDataSource;
+    private static m_instanceStack: DecompilerInstance[];
+
+    static initialize(dataSource: IDataSource) {
+        if (Decompiler.m_instance) return;
+
+        Decompiler.m_instance = new Decompiler();
+        Decompiler.m_dataSource = dataSource;
+        Decompiler.m_instanceStack = [];
+    }
+
+    static get dataSource() {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        return Decompiler.m_dataSource;
+    }
+
+    static findFunctionByAddress(address: number) {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        return Decompiler.dataSource.findFunctionByAddress(address);
+    }
+
+    static findFunctionById(id: number) {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        return Decompiler.dataSource.findFunctionById(id);
+    }
+
+    static getInstructionAtAddress(address: number) {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        return Decompiler.dataSource.getInstructionAtAddress(address);
+    }
+
+    static getCacheForFunctionId(id: number) {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        return Decompiler.dataSource.getCacheForFunctionId(id);
+    }
+
+    static decompile(functionId: number) {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+
+        const instance = new DecompilerInstance();
+        let result: CodeBuilder | null = null;
+        Decompiler.m_instanceStack.push(instance);
+        try {
+            result = instance.decompile(functionId);
+            Decompiler.m_instanceStack.pop();
+        } catch (e) {
+            Decompiler.m_instanceStack.pop();
+            throw e;
+        }
+
+        return result;
+    }
+
+    static get current() {
+        if (!Decompiler.m_dataSource) throw new Error('Decompiler not initialized');
+        if (Decompiler.m_instanceStack.length === 0) throw new Error('No active decompiler instance');
+
+        return Decompiler.m_instanceStack[Decompiler.m_instanceStack.length - 1];
+    }
+}
+
+export class DecompilerInstance {
     private m_didSetRegister: boolean;
-    private m_funcDb!: IFunctionDatabase;
     private m_instructionMap: Map<number, i.Instruction>;
     private m_ignoredAddresses: Set<number>;
     private m_currentInstruction!: i.Instruction;
-    private m_ssaForm!: SSAForm;
-    private m_dominators!: DominatorInfo;
-    private m_cfg!: ControlFlowGraph;
-    private m_flowAnalyzer!: SSAControlFlowAnalyzer;
-    private m_variableDB!: VariableDB;
     private m_cache!: DecompilerCache;
     private m_defsLocked: boolean;
 
@@ -62,24 +84,12 @@ export class Decompiler {
         this.m_defsLocked = false;
     }
 
-    static get() {
-        if (!Decompiler.instance) {
-            Decompiler.instance = new Decompiler();
-        }
-
-        return Decompiler.instance;
-    }
-
     get currentAddress() {
         return this.currentInstruction ? this.currentInstruction.address : 0;
     }
 
-    get funcDb() {
-        return this.m_funcDb;
-    }
-
-    get flowAnalyzer(): SSAControlFlowAnalyzer {
-        return this.m_flowAnalyzer;
+    set currentAddress(address: number) {
+        this.m_currentInstruction = this.getInstruction(address);
     }
 
     set currentInstruction(instr: i.Instruction) {
@@ -94,16 +104,12 @@ export class Decompiler {
         return this.m_currentInstruction;
     }
 
-    get ssa(): SSAForm {
-        return this.m_ssaForm;
-    }
-
     get cache() {
         return this.m_cache;
     }
 
     get vars() {
-        return this.m_variableDB;
+        return this.m_cache.vars;
     }
 
     get defsLocked() {
@@ -124,73 +130,16 @@ export class Decompiler {
         this.m_didSetRegister = value;
     }
 
-    private reset(instructions: i.Instruction[], func: Func | Method): void {
+    private reset(): void {
         this.m_didSetRegister = false;
         this.m_defsLocked = false;
-        this.m_currentInstruction = instructions[0];
+        this.m_currentInstruction = this.m_cache.code.instructions[0];
         this.m_instructionMap.clear();
         this.m_ignoredAddresses.clear();
 
-        this.analyzeStack(instructions, this.m_cache);
+        this.analyzeStack(this.m_cache.code.instructions, this.m_cache);
 
-        instructions.forEach(inst => this.m_instructionMap.set(inst.address, inst));
-
-        // Create CFG first
-        this.m_cfg = ControlFlowGraph.build(instructions);
-
-        // Build dominator info
-        this.m_dominators = new DominatorInfo(this.m_cfg);
-
-        // Create SSA form
-        if (this.m_ssaForm) this.m_ssaForm.reset(this.m_cfg, this.m_dominators, func);
-        else this.m_ssaForm = new SSAForm(this.m_cfg, this.m_dominators, func);
-
-        if (this.m_variableDB) this.m_variableDB.reset();
-        else this.m_variableDB = new VariableDB(this.m_ssaForm);
-
-        // Create flow analyzer
-        this.m_flowAnalyzer = new SSAControlFlowAnalyzer(this.m_cfg, this.m_dominators, this.m_ssaForm);
-    }
-
-    private initialize(instructions: i.Instruction[], func: Func | Method) {
-        this.m_ssaForm.addDef(
-            instructions[0],
-            { type: Reg.Type.EE, id: Reg.EE.PC },
-            Expr.Imm.u32(instructions[0].address)
-        );
-        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.SP }, new Expr.StackPointer());
-        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.RA }, new Expr.RawString(`in_ra`));
-        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.EE, id: Reg.EE.ZERO }, Expr.Imm.i128(0));
-        this.m_ssaForm.addDef(instructions[0], { type: Reg.Type.COP2_VI, id: Reg.COP2.Integer.VI0 }, Expr.Imm.i32(0));
-
-        // Handle function parameters
-        if (func instanceof Method) {
-            const signature = func.signature;
-            const value = new DecompVariable(signature.thisType, func.thisValue.name, this.m_ssaForm);
-            let def: SSADefWithValue;
-            if ('reg' in signature.thisLocation) {
-                def = this.m_ssaForm.addDef(instructions[0], signature.thisLocation.reg, new Expr.Variable(value));
-            } else {
-                def = this.m_ssaForm.addDef(instructions[0], signature.thisLocation.offset, new Expr.Variable(value));
-            }
-
-            this.m_variableDB.addVariable(def.location, instructions[0], value);
-        }
-
-        const signature = func.signature;
-        const args = signature.arguments;
-        for (let idx = 0; idx < args.length; idx++) {
-            const arg = args[idx];
-            const value = new DecompVariable(arg.typeId, func.arguments[idx].name, this.m_ssaForm);
-            let def: SSADefWithValue;
-            if ('reg' in arg.location) {
-                def = this.m_ssaForm.addDef(instructions[0], arg.location.reg, new Expr.Variable(value));
-            } else {
-                def = this.m_ssaForm.addDef(instructions[0], arg.location.offset, new Expr.Variable(value));
-            }
-
-            this.m_variableDB.addVariable(def.location, instructions[0], value);
-        }
+        this.m_cache.code.instructions.forEach(inst => this.m_instructionMap.set(inst.address, inst));
     }
 
     isAddressIgnored(address: number) {
@@ -232,7 +181,7 @@ export class Decompiler {
         for (let idx = stackAdjustIdx; idx < code.length; idx++) {
             const op = code[idx];
 
-            if (op.code === Op.Code.sq) {
+            if (op.code === Op.Code.sq || op.code === Op.Code.sd) {
                 const mem = op.operands[1] as Op.MemOperand;
 
                 if (Reg.compare(mem.base, sp)) {
@@ -250,7 +199,7 @@ export class Decompiler {
                 }
             }
 
-            if (op.code === Op.Code.lq) {
+            if (op.code === Op.Code.lq || op.code === Op.Code.ld) {
                 const mem = op.operands[1] as Op.MemOperand;
 
                 if (Reg.compare(mem.base, sp)) {
@@ -276,166 +225,110 @@ export class Decompiler {
         }
     }
 
-    decompile(code: i.Instruction[], cache: DecompilerCache, funcDb: IFunctionDatabase) {
+    decompile(functionId: number) {
+        let cache = Decompiler.getCacheForFunctionId(functionId);
+        if (!cache) {
+            const func = Decompiler.findFunctionById(functionId);
+            if (!func) throw new Error(`Failed to find function with id ${functionId}`);
+
+            cache = new DecompilerCache(functionId);
+        }
+
         this.defsLocked = false;
+        this.m_currentInstruction = cache.code.instructions[0];
         this.m_cache = cache;
-        this.m_funcDb = funcDb;
-        this.reset(code, cache.func);
+        this.reset();
+        cache.code.initialize();
+        this.analyzeStack(this.m_cache.code.instructions, this.m_cache);
+        this.m_cache.code.rebuildValues();
 
-        this.initialize(code, cache.func);
-        this.analyzeStack(code, cache);
+        const flow = new ControlFlowAnalyzer(this.m_cache.code);
+        flow.analyze();
 
-        this.m_ssaForm.process();
-        this.defsLocked = true;
+        const ast = flow.buildAST();
 
-        this.m_flowAnalyzer.analyze();
-
-        const ast = this.m_flowAnalyzer.buildAST();
-
-        const analyzer = new ASTAnalyzer(this.m_ssaForm, this.m_variableDB, this.m_cfg);
+        const analyzer = new ASTAnalyzer(this.m_cache.code);
         analyzer.analyze(ast);
 
-        const builder = new CodeBuilder(this.m_ssaForm);
+        const builder = new CodeBuilder(this.m_cache.code);
+        builder.pushAddress(cache.func.address);
         builder.functionHeader(cache.func);
-        this.m_flowAnalyzer.generate(ast, builder);
+        flow.generate(ast, builder);
         builder.functionFooter();
+        builder.popAddress();
         return builder;
     }
 
-    promoteToVariable(location: Location, name?: string): DecompVariable {
-        return this.m_variableDB.promote(location, this.m_currentInstruction, name);
-    }
+    promote(location: Location | VersionedLocation, name?: string): DecompVariable {
+        if (typeof location !== 'number' && 'version' in location) {
+            return this.vars.promote(location, name);
+        }
 
-    promoteVersionToVariable(location: VersionedLocation, name?: string): DecompVariable {
-        return this.m_variableDB.promoteVersion(location, name);
+        return this.vars.promote(location, this.currentAddress, name);
     }
 
     setRegister(reg: Reg.Register, value: Expr.Expression): void {
         if (this.m_defsLocked) return;
 
-        // console.log(`Setting register ${formatRegister(reg)} to ${value}`);
         if (Reg.compare(reg, { type: Reg.Type.EE, id: Reg.EE.ZERO })) return;
         if (Reg.compare(reg, { type: Reg.Type.EE, id: Reg.EE.SP })) return;
         if (Reg.compare(reg, { type: Reg.Type.COP2_VI, id: Reg.COP2.Integer.VI0 })) return;
 
-        const reduced = value.reduce().clone();
+        const reduced = value.reduce();
+
+        const def = this.m_cache.code.getDef(this.currentInstruction, reg);
+        this.m_cache.code.setValueOf(def, reduced);
 
         if (reduced instanceof Expr.Variable) {
-            // Existing variable being moved to another register, just extend its locations
-            const def = this.m_ssaForm.getMostRecentDefInfo(this.m_currentInstruction, reg, false);
-            if (def) {
-                reduced.value.addSSALocation(def.location, def.version);
-                reduced.location = {
-                    value: reg,
-                    version: def.version
-                };
-                this.m_ssaForm.addDef(this.m_currentInstruction, reg, reduced);
-                return;
-            }
+            // Existing variable being moved to another location, just extend its locations
+            reduced.value.addSSALocation(reg, def.version);
         }
-
-        // Record the definition in SSA form
-        const def = this.m_ssaForm.addDef(this.m_currentInstruction, reg, reduced);
-        reduced.location = {
-            value: reg,
-            version: def.version
-        };
-
-        // Then, promote the variable
-        // const val = this.m_variableDB.promote(reg, this.m_currentInstruction);
-        // const decl = new Expr.Variable(val, reduced);
-        // decl.address = this.m_currentInstruction.address;
-        // decl.location = {
-        //     value: reg,
-        //     version: def.version
-        // };
-
-        // Update the definition with the new variable
-        // def.value = decl;
     }
 
     getRegister(reg: Reg.Register, atAddress?: number): Expr.Expression {
-        const instr = atAddress ? Decompiler.get().getInstruction(atAddress) : this.m_currentInstruction;
-        const value = this.m_variableDB.getVariable(reg, instr);
-        if (value) {
-            const expr = new Expr.Variable(value);
-            expr.address = instr.address;
-            return expr;
+        const instr = atAddress ? this.getInstruction(atAddress) : this.currentInstruction;
+        const use = this.m_cache.code.getUse(instr, reg);
+
+        const variable = this.m_cache.vars.getVariable(use);
+
+        if (variable) {
+            const result = new Expr.Variable(variable);
+            result.address = instr.address;
+            result.location = { value: use.value, version: use.version };
+            return result;
         }
 
-        const val = this.m_ssaForm.getMostRecentDef(instr, reg);
-        if (val) return val;
-
-        // Check if there is a use in the current instruction
-        const use = this.m_ssaForm.getUse(instr, reg);
-        if (use) {
-            const expr = new Expr.SSAVariable(reg, use.version);
-            expr.address = instr.address;
-            return expr;
-        }
-
-        const expr = new Expr.RawString(`in_${Reg.formatRegister(reg).slice(1)}`);
-        expr.address = instr.address;
-        return expr;
+        return this.m_cache.code.getValueOf(use);
     }
 
     setStack(offset: number, value: Expr.Expression) {
         if (this.m_defsLocked) return;
 
-        // console.log(`Setting stack offset 0x${offset.toString(16)} to ${value}`);
+        const reduced = value.reduce();
 
-        const reduced = value.reduce().clone();
+        const def = this.m_cache.code.getDef(this.currentInstruction, offset);
+        this.m_cache.code.setValueOf(def, reduced);
+
+        // console.log(`${formatVersionedLocation(def)} <- ${reduced}`, reduced);
 
         if (reduced instanceof Expr.Variable) {
-            const def = this.m_ssaForm.getMostRecentDefInfo(this.m_currentInstruction, offset, false);
-            if (def) {
-                reduced.value.addSSALocation(def.location, def.version);
-                reduced.location = {
-                    value: offset,
-                    version: def.version
-                };
-                this.m_ssaForm.addDef(this.m_currentInstruction, offset, reduced);
-                return;
-            }
+            // Existing variable being moved to another location, just extend its locations
+            reduced.value.addSSALocation(offset, def.version);
         }
-
-        const def = this.m_ssaForm.addDef(this.m_currentInstruction, offset, reduced);
-        reduced.location = {
-            value: offset,
-            version: def.version
-        };
     }
 
     getStack(offset: number, atAddress?: number): Expr.Expression {
-        const instr = atAddress ? Decompiler.get().getInstruction(atAddress) : this.m_currentInstruction;
+        const instr = atAddress ? this.getInstruction(atAddress) : this.currentInstruction;
+        const use = this.m_cache.code.getUse(instr, offset);
 
-        const value = this.m_variableDB.getVariable(offset, instr);
-        if (value) {
-            const expr = new Expr.Variable(value);
-            expr.address = instr.address;
-            return expr;
-        }
-
-        const use = this.m_ssaForm.getUse(instr, offset);
-        if (use) {
-            const expr = new Expr.SSAVariable(offset, use.version);
-            expr.address = instr.address;
-            return expr;
-        }
-
-        const expr = new Expr.RawString(`in_stack_${offset.toString(16)}`);
-        expr.address = instr.address;
-        return expr;
-    }
-
-    getValueForVersion(location: Location, version: number): Expr.Expression | null {
-        const variable = this.m_variableDB.getVariableWithVersion(location, version);
+        const variable = this.m_cache.vars.getVariable(use);
         if (variable) {
-            const expr = new Expr.Variable(variable);
-            expr.address = this.m_currentInstruction.address;
-            return expr;
+            const result = new Expr.Variable(variable);
+            result.address = instr.address;
+            result.location = { value: use.value, version: use.version };
+            return result;
         }
 
-        return this.m_ssaForm.getValueForVersion(location, version);
+        return this.m_cache.code.getValueOf(use);
     }
 }
