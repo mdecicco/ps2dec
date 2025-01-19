@@ -568,33 +568,6 @@ export class FunctionCode {
     private process() {
         this.buildDefUse();
         this.identifyPhis();
-
-        this.m_cfg.walkForward(b => {
-            b.each(instr => {
-                if (!instr.isStore) return;
-
-                const reads = this.getUses(instr);
-                const writes = this.getDefs(instr, false);
-
-                for (const write of writes) {
-                    if (typeof write.value !== 'number') continue;
-                    // either spilled register or register backup
-
-                    const storedValueLoc = reads.find(r => Reg.compare(instr.reads[0], r.value as Reg.Register));
-                    if (!storedValueLoc) continue;
-                    if (storedValueLoc.version === 0) {
-                        // register backup
-                        continue;
-                    }
-
-                    console.log(
-                        `Found spilled register ${formatVersionedLocation(storedValueLoc)} @ ${instr.toString(true)}`
-                    );
-                }
-            });
-
-            return true;
-        });
     }
 
     private define(location: Location, value: Expr.Expression) {

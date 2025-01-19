@@ -419,11 +419,37 @@ export class StackPointer extends Expression {
         }
     }
 
+    generateOffset(code: CodeBuilder, offset: number, atAddress?: number) {
+        const decomp = Decompiler.current;
+        const func = decomp.cache.code;
+
+        try {
+            const mostRecentDef = func.getDefAt(offset, atAddress || this.address);
+            if (!mostRecentDef) {
+                throw new Error('No definition found');
+            }
+
+            const variable = decomp.vars.getVariable(mostRecentDef);
+            if (!variable) {
+                throw new Error('No variable found');
+            }
+
+            code.punctuation('&');
+            code.variable(variable);
+        } catch (e) {
+            console.error(e);
+            code.punctuation('&');
+            code.miscReference(`in_stack_${offset}`);
+        }
+    }
+
     clone(): Expression {
         return new StackPointer().copyFrom(this);
     }
 
-    generate_impl(code: CodeBuilder): void {}
+    generate_impl(code: CodeBuilder): void {
+        this.generateOffset(code, 0);
+    }
 
     protected toString_impl(): string {
         return `$sp`;

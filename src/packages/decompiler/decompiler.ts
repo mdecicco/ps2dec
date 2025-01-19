@@ -243,6 +243,32 @@ export class DecompilerInstance {
         this.analyzeStack(this.m_cache.code.instructions, this.m_cache);
         this.m_cache.code.rebuildValues();
 
+        this.m_cache.code.cfg.walkForward(b => {
+            b.each(instr => {
+                if (!instr.isStore) return;
+
+                const reads = this.m_cache.code.getUses(instr);
+                const writes = this.m_cache.code.getDefs(instr, false);
+
+                for (const write of writes) {
+                    if (typeof write.value !== 'number') continue;
+                    // either spilled register or register backup
+
+                    const storedValueLoc = reads.find(r => Reg.compare(instr.reads[0], r.value as Reg.Register));
+                    if (!storedValueLoc) continue;
+                    if (storedValueLoc.version === 0) {
+                        // register backup
+                        continue;
+                    }
+
+                    const val = this.m_cache.vars.promote(storedValueLoc);
+                    val.addSSALocation(write.value, write.version);
+                }
+            });
+
+            return true;
+        });
+
         const flow = new ControlFlowAnalyzer(this.m_cache.code);
         flow.analyze();
 
@@ -288,6 +314,12 @@ export class DecompilerInstance {
 
     getRegister(reg: Reg.Register, atAddress?: number): Expr.Expression {
         const instr = atAddress ? this.getInstruction(atAddress) : this.currentInstruction;
+        if (reg.type === Reg.Type.EE && reg.id === Reg.EE.SP) {
+            const sp = new Expr.StackPointer();
+            sp.address = instr.address;
+            return sp;
+        }
+
         const use = this.m_cache.code.getUse(instr, reg);
 
         const variable = this.m_cache.vars.getVariable(use);

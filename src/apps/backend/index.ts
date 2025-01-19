@@ -38,7 +38,7 @@ app.once('ready', () => {
 
     if (process.env.NODE_ENV === 'development') {
         win.loadURL('http://localhost:5173').catch(e => console.error(e));
-        win.webContents.openDevTools();
+        // win.webContents.openDevTools();
     } else {
         const rendererHtmlPath = path.join(__dirname, '../frontend/index.html');
         win.loadFile(rendererHtmlPath).catch(e => console.error(e));

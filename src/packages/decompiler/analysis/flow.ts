@@ -114,6 +114,15 @@ export class ControlFlowAnalyzer {
             if (instr.isBranch && !allowedBranches.has(instr.code)) return;
 
             if (decomp.isAddressIgnored(instr.address)) return;
+            if (instr.isStore) {
+                const mem = instr.operands.find(Op.isMem) as Op.MemOperand | undefined;
+                if (mem) {
+                    if (mem.base.type === Reg.Type.EE && mem.base.id === Reg.EE.SP) {
+                        // Stack pointer stores are used to spill registers
+                        return;
+                    }
+                }
+            }
 
             // If this is the step instruction for any loop we're in, skip it
             const isLoopIncrement = this.m_loopRegionStack.some(loop => {
