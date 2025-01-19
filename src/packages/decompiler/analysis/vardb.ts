@@ -1,15 +1,32 @@
-import { Location, VersionedLocation } from '../common';
-
-import { EventListener, formatLocation, LocationMap } from 'utils';
-
 import { Reg } from 'decoder';
-import { FunctionCode, LocationDef } from '../input';
-import { DataType, PointerType, TypeSystem } from '../typesys';
-import { Value } from '../value';
+import { Location, VersionedLocation } from 'types';
+import { DataType, PointerType, TypeSystem } from 'typesys';
+import { EventListener, EventProducer, LocationMap, LocationSet } from 'utils';
 
-type VarVersionMap = Map<number, DecompVariable>;
+import { FunctionCode } from '../input';
+import { LocationDef } from '../types';
 
-export class DecompVariable extends Value {
+type ValueEvents = {
+    'name-changed': (newName: string | null, oldName: string | null) => void;
+    'type-changed': (newType: DataType, oldType: DataType) => void;
+    'ssa-location-added': (location: Location, version: number) => void;
+};
+
+export type SerializedValue = {
+    typeId: number;
+    name: string | null;
+    nameAssigned: boolean;
+    ssaLocations: Location[];
+    ssaVersions: [Location, number[]][];
+};
+
+type VarVersionMap = Map<number, Value>;
+
+export class Value extends EventProducer<ValueEvents> {
+    private m_typeId: number;
+    private m_name: string;
+    private m_ssaLocations: LocationSet;
+    private m_ssaVersions: LocationMap<number[]>;
     private m_func: FunctionCode;
     private m_db: VariableDB;
     private m_nameAssigned: boolean;
@@ -18,17 +35,23 @@ export class DecompVariable extends Value {
 
     constructor(type: DataType | number | string, name: string | null | undefined, func: FunctionCode, db: VariableDB) {
         const tp = type instanceof DataType ? type : TypeSystem.get().getType(type);
-        super(tp, name);
+
+        super();
+        this.m_typeId = tp.id;
+        this.m_ssaLocations = new LocationSet();
+        this.m_ssaVersions = new LocationMap<number[]>();
         this.m_nameAssigned = !!name;
         this.m_func = func;
         this.m_db = db;
         this.hasDeclaration = false;
+
         if (!name) {
             this.m_name = this.m_db.getDefaultVarName(this);
             this.m_typeListener = this.addListener('type-changed', () => {
                 this.m_name = this.m_db.getDefaultVarName(this);
             });
         } else {
+            this.m_name = name;
             this.m_typeListener = null;
         }
     }
@@ -38,17 +61,62 @@ export class DecompVariable extends Value {
     }
 
     get name(): string {
-        return this.m_name as string;
+        return this.m_name;
     }
 
     set name(name: string) {
+        const oldName = this.m_name;
         this.m_name = name;
+
         this.m_nameAssigned = true;
 
         if (this.m_typeListener) {
             this.m_typeListener.remove();
             this.m_typeListener = null;
         }
+
+        this.dispatch('name-changed', name, oldName);
+    }
+
+    get type(): DataType {
+        return TypeSystem.get().getType(this.m_typeId);
+    }
+
+    set type(type: DataType | number | string) {
+        const newType = typeof type === 'number' || typeof type === 'string' ? TypeSystem.get().getType(type) : type;
+        this.validateType(newType);
+        const oldType = this.type;
+        this.m_typeId = newType.id;
+        this.dispatch('type-changed', newType, oldType);
+    }
+
+    get ssaLocations(): LocationSet {
+        return this.m_ssaLocations;
+    }
+
+    get versions(): LocationMap<number[]> {
+        return this.m_ssaVersions;
+    }
+
+    getSSAVersions(location: Location): number[] {
+        return this.m_ssaVersions.get(location) || [];
+    }
+
+    addSSALocation(location: Location, version: number): void {
+        this.m_ssaLocations.add(location);
+
+        const versions = this.m_ssaVersions.get(location) || [];
+        if (!versions.includes(version)) {
+            versions.push(version);
+            this.m_ssaVersions.set(location, versions);
+
+            this.dispatch('ssa-location-added', location, version);
+        }
+    }
+
+    hasSSAVersion(location: Location, version: number): boolean {
+        const versions = this.m_ssaVersions.get(location);
+        return versions ? versions.includes(version) : false;
     }
 
     toString(): string {
@@ -58,9 +126,9 @@ export class DecompVariable extends Value {
             const def = this.m_func.getDefOf({ value: loc, version });
             if (!def) return version.toString();
 
-            if (!def.instruction) return '[initial]';
+            if (!def.instruction) return `[v${version}:initial]`;
 
-            return `[${def.instruction} @ 0x${def.instruction.address.toString(16).padStart(8, '0')}]`;
+            return `[v${version}: ${def.instruction} @ 0x${def.instruction.address.toString(16).padStart(8, '0')}]`;
         };
 
         this.versions.entries.forEach(([loc, versions]) => {
@@ -73,11 +141,40 @@ export class DecompVariable extends Value {
 
         return `${this.name}: [${locs.join(', ')}]`;
     }
+
+    serialize(): SerializedValue {
+        return {
+            typeId: this.m_typeId,
+            name: this.name,
+            nameAssigned: this.m_nameAssigned,
+            ssaLocations: this.m_ssaLocations.values,
+            ssaVersions: this.m_ssaVersions.entries
+        };
+    }
+
+    static defaultName(type: DataType) {
+        const idx = 0; // todo
+        return `${type.name[0].toLowerCase()}Var${idx}`;
+    }
+
+    static deserialize(data: SerializedValue, func: FunctionCode, db: VariableDB): Value {
+        const value = new Value(data.typeId, data.nameAssigned ? data.name : null, func, db);
+        value.m_ssaLocations = new LocationSet(data.ssaLocations);
+        value.m_ssaVersions = new LocationMap();
+        for (const [location, versions] of data.ssaVersions) {
+            value.m_ssaVersions.set(location, versions);
+        }
+        return value;
+    }
+
+    private validateType(type: DataType) {
+        // todo
+    }
 }
 
 export class VariableDB {
     private m_func: FunctionCode;
-    private m_variables: DecompVariable[];
+    private m_variables: Value[];
     private m_valueListeners: EventListener[];
     private m_varMap: LocationMap<VarVersionMap>;
 
@@ -92,7 +189,7 @@ export class VariableDB {
         return this.m_variables;
     }
 
-    private mapVariable(location: Location, version: number, value: DecompVariable) {
+    private mapVariable(location: Location, version: number, value: Value) {
         const map = this.m_varMap.get(location);
         if (!map) {
             this.m_varMap.set(location, new Map([[version, value]]));
@@ -109,24 +206,20 @@ export class VariableDB {
         this.m_varMap.clear();
     }
 
-    addVariable(location: VersionedLocation, value: DecompVariable): void;
-    addVariable(location: Location, atAddress: number, value: DecompVariable): void;
-    addVariable(
-        location: Location | VersionedLocation,
-        addressOrValue: number | DecompVariable,
-        maybeValue?: DecompVariable
-    ): void {
+    addVariable(location: VersionedLocation, value: Value): void;
+    addVariable(location: Location, atAddress: number, value: Value): void;
+    addVariable(location: Location | VersionedLocation, addressOrValue: number | Value, maybeValue?: Value): void {
         let def: LocationDef | null = null;
         let loc: Location;
-        let value: DecompVariable;
+        let value: Value;
 
-        if (typeof location !== 'number' && 'version' in location && addressOrValue instanceof DecompVariable) {
+        if (typeof location !== 'number' && 'version' in location && addressOrValue instanceof Value) {
             def = this.m_func.getDefOf(location);
             loc = def.value;
             value = addressOrValue;
         } else if (
             (typeof location === 'number' || 'type' in location) &&
-            !(addressOrValue instanceof DecompVariable) &&
+            !(addressOrValue instanceof Value) &&
             maybeValue
         ) {
             def = this.m_func.getDefAt(location, addressOrValue);
@@ -152,17 +245,19 @@ export class VariableDB {
         if (!this.m_variables.includes(value)) {
             this.m_variables.push(value);
             const locListener = value.addListener('ssa-location-added', (newLoc, version) => {
-                console.log('adding location', formatLocation(newLoc), version);
                 this.mapVariable(newLoc, version, value);
 
-                // rebuild expression trees that use this location
-                this.m_func.getUsesOf({ value: newLoc, version }).forEach(use => {
-                    console.log('rebuilding', use.instruction.toString(true));
-                    use.instruction.generate();
-                });
+                if (!this.m_func.isRebuilding) {
+                    // rebuild expression trees that use this location
+                    this.m_func.getUsesOf({ value: newLoc, version }).forEach(use => {
+                        use.instruction.generate();
+                    });
+                }
             });
 
             const typeListener = value.addListener('type-changed', () => {
+                if (this.m_func.isRebuilding) return;
+
                 value.versions.entries.forEach(([loc, versions]) => {
                     versions.forEach(version => {
                         this.m_func.getUsesOf({ value: loc, version }).forEach(use => {
@@ -177,18 +272,19 @@ export class VariableDB {
         }
 
         this.m_func.getUsesOf(def).forEach(use => {
-            console.log('rebuilding', use.instruction.toString(true));
+            if (this.m_func.isRebuilding) return;
+
             use.instruction.generate();
         });
     }
 
-    promote(location: VersionedLocation, name?: string): DecompVariable;
-    promote(location: Location, atAddress: number, name?: string): DecompVariable;
+    promote(location: VersionedLocation, name?: string): Value;
+    promote(location: Location, atAddress: number, name?: string): Value;
     promote(
         location: Location | VersionedLocation,
         atAddressOrName: number | string | undefined,
         maybeName?: string
-    ): DecompVariable {
+    ): Value {
         let loc: Location;
         let version: number;
         let name: string | undefined = undefined;
@@ -220,16 +316,16 @@ export class VariableDB {
         if (existing) return existing;
 
         const value = this.m_func.getValueOf({ value: loc, version });
-        const variable = new DecompVariable(value.type, name, this.m_func, this);
+        const variable = new Value(value.type, name, this.m_func, this);
         variable.addSSALocation(loc, version);
         this.addVariable({ value: loc, version }, variable);
 
         return variable;
     }
 
-    getVariable(location: VersionedLocation): DecompVariable | null;
-    getVariable(location: Location, atAddress: number): DecompVariable | null;
-    getVariable(location: Location | VersionedLocation, address?: number): DecompVariable | null {
+    getVariable(location: VersionedLocation): Value | null;
+    getVariable(location: Location, atAddress: number): Value | null;
+    getVariable(location: Location | VersionedLocation, address?: number): Value | null {
         let loc: Location;
         let version: number;
 
@@ -252,7 +348,7 @@ export class VariableDB {
         return map.get(version) || null;
     }
 
-    getDefaultVarName(variable: DecompVariable): string {
+    getDefaultVarName(variable: Value): string {
         const prefix = this.getVarNamePrefix(variable.type);
         let count = 0;
         let name = `${prefix}Var0`;
@@ -269,8 +365,8 @@ export class VariableDB {
         return name;
     }
 
-    createVariable(type: DataType | number | string, name?: string | null): DecompVariable {
-        const value = new DecompVariable(type, name, this.m_func, this);
+    createVariable(type: DataType | number | string, name?: string | null): Value {
+        const value = new Value(type, name, this.m_func, this);
         this.m_variables.push(value);
         const locListener = value.addListener('ssa-location-added', (newLoc, version) => {
             this.mapVariable(newLoc, version, value);

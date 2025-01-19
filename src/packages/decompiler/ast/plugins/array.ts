@@ -1,8 +1,9 @@
 import { Expr } from 'decoder';
-import * as nodes from '../../ast/nodes';
+import { DataType, PrimitiveType } from 'typesys';
+
 import { Decompiler } from '../../decompiler';
-import { DataType, PrimitiveType } from '../../typesys';
-import { ASTAnalyzerPlugin } from '../ast_plugin';
+import * as nodes from '../nodes';
+import { ASTAnalyzerPlugin } from '../plugin';
 
 export class ArrayAccessAnalyzer extends ASTAnalyzerPlugin {
     analyzeExpression(ast: nodes.ExpressionNode): boolean {

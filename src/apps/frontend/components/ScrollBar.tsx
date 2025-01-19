@@ -87,7 +87,8 @@ export const ScrollBar: React.FC<ScrollBarProps> = props => {
         <Box
             style={{
                 height: '100%',
-                width: '20px',
+                minWidth: '20px',
+                maxWidth: '20px',
                 backgroundColor: '#292929',
                 position: 'relative'
             }}

@@ -12,7 +12,8 @@
             "decoder": ["./packages/decoder"],
             "utils": ["./packages/utils"],
             "messages": ["./packages/messages"],
-            "types": ["./packages/types"]
+            "types": ["./packages/types"],
+            "typesys": ["./packages/typesys"]
         },
         "sourceMap": true
     },

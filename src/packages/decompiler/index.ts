@@ -4,5 +4,4 @@ export * from './codegen';
 export * from './common';
 export * from './decompiler';
 export * from './input';
-export * from './typesys';
-export * from './value';
+export * from './types';

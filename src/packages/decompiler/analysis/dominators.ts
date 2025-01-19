@@ -5,11 +5,8 @@ export class DominatorInfo {
     private m_immediateDominator: Map<BasicBlock, BasicBlock> = new Map();
     // Maps each block to the set of blocks in its dominance frontier
     private m_dominanceFrontier: Map<BasicBlock, Set<BasicBlock>> = new Map();
-    // All blocks in the CFG, for convenience
-    private m_blocks: BasicBlock[] = [];
 
     constructor(cfg: ControlFlowGraph) {
-        this.m_blocks = cfg.getAllBlocks();
         this.computeDominators(cfg);
         this.computeDominanceFrontiers(cfg);
     }
@@ -30,15 +27,20 @@ export class DominatorInfo {
         const entry = cfg.getEntryBlock();
         if (!entry) return;
 
-        // Initialize dominators set for each block
-        // Start with every block being dominated by all blocks (except entry)
-        const dominators = new Map<BasicBlock, Set<BasicBlock>>();
-        for (const block of this.m_blocks) {
-            dominators.set(block, new Set(this.m_blocks));
-        }
+        const blocks = cfg.getAllBlocks();
 
-        // Entry block is only dominated by itself
+        // Initialize dominator sets
+        const dominators = new Map<BasicBlock, Set<BasicBlock>>();
+
+        // Entry block is dominated by itself
         dominators.set(entry, new Set([entry]));
+
+        // All other blocks start with empty dominator sets
+        for (const block of blocks) {
+            if (block !== entry) {
+                dominators.set(block, new Set());
+            }
+        }
 
         // Iteratively refine dominator sets
         let changed = true;
@@ -46,38 +48,34 @@ export class DominatorInfo {
             changed = false;
 
             // For each block (except entry)
-            for (const block of this.m_blocks) {
+            for (const block of blocks) {
                 if (block === entry) continue;
 
-                // New dominators = intersection of all predecessors' dominators
                 const newDoms = new Set<BasicBlock>();
+                const initialPreds = this.getInitialPredecessors(block, entry);
+                const [firstPred, ...restPreds] = initialPreds;
 
-                // A block dominates itself
-                newDoms.add(block);
+                if (firstPred) {
+                    dominators.get(firstPred)!.forEach(d => newDoms.add(d));
 
-                // Get intersection of all predecessors' dominators
-                block.predecessors.forEach((pred, index) => {
-                    const predDoms = dominators.get(pred)!;
-                    if (index === 0) {
-                        // First predecessor - add all its dominators
-                        predDoms.forEach(d => newDoms.add(d));
-                    } else {
-                        // Subsequent predecessors - keep only common dominators
-                        for (const dom of newDoms) {
+                    for (const pred of restPreds) {
+                        const predDoms = dominators.get(pred)!;
+                        for (const dom of Array.from(newDoms)) {
                             if (!predDoms.has(dom)) {
                                 newDoms.delete(dom);
                             }
                         }
                     }
-                });
+                }
 
-                // If dominators changed for this block, mark as changed
+                newDoms.add(block);
+
+                // Check if anything changed
                 const oldDoms = dominators.get(block)!;
                 if (newDoms.size !== oldDoms.size) {
                     changed = true;
                     dominators.set(block, newDoms);
                 } else {
-                    // Check if sets are actually different
                     for (const dom of newDoms) {
                         if (!oldDoms.has(dom)) {
                             changed = true;
@@ -90,7 +88,7 @@ export class DominatorInfo {
         }
 
         // Convert dominator sets to immediate dominators
-        for (const block of this.m_blocks) {
+        for (const block of blocks) {
             if (block === entry) continue;
 
             const doms = dominators.get(block)!;
@@ -101,6 +99,11 @@ export class DominatorInfo {
                 if (dom === block) continue;
                 if (!idom) {
                     idom = dom;
+                    continue;
+                }
+
+                // If current idom is dominated by this dominator, this one is further away
+                if (dominators.get(idom)!.has(dom)) {
                     continue;
                 }
 
@@ -127,26 +130,31 @@ export class DominatorInfo {
      * These are the places where we'll need to insert phi nodes in SSA form.
      */
     private computeDominanceFrontiers(cfg: ControlFlowGraph): void {
-        for (const block of this.m_blocks) {
-            this.m_dominanceFrontier.set(block, new Set());
+        const blocks = cfg.getAllBlocks();
 
-            // If block has multiple predecessors
-            if (block.predecessors.length > 1) {
-                // Look at each predecessor
-                for (const pred of block.predecessors) {
-                    // Walk up the dominator tree from predecessor
-                    let runner = pred;
-                    let iterations = 0;
-                    while (runner !== this.getImmediateDominator(block)) {
-                        this.m_dominanceFrontier.get(runner)?.add(block);
-                        runner = this.getImmediateDominator(runner) ?? runner;
+        // The dominance frontier of a node r is the set of all
+        // nodes b such that r dominates an immediate predecessor
+        // of b, but r does not strictly dominate b
 
-                        iterations++;
-                        if (iterations === 100) {
-                            cfg.debugPrint();
-                            throw new Error('probably malformed CFG');
-                        }
+        for (const b of blocks) {
+            this.m_dominanceFrontier.set(b, new Set());
+            if (b.predecessors.length <= 1) continue;
+
+            for (const pred of b.predecessors) {
+                let r: BasicBlock = pred;
+                while (r !== this.getImmediateDominator(b)) {
+                    // If r dominates a predecessor of b but doesn't dominate b,
+                    // then b is in r's dominance frontier
+
+                    const rStrictDominatesB = r !== b && this.dominates(r, b);
+                    if (b.predecessors.some(p => this.dominates(r, p)) && !rStrictDominatesB) {
+                        this.m_dominanceFrontier.get(r)?.add(b);
                     }
+
+                    const nextR = this.getImmediateDominator(r);
+                    if (!nextR) break;
+
+                    r = nextR;
                 }
             }
         }
@@ -176,5 +184,30 @@ export class DominatorInfo {
             if (!runner) return false;
         }
         return false;
+    }
+
+    private getInitialPredecessors(block: BasicBlock, entry: BasicBlock): BasicBlock[] {
+        const seen = new Set<BasicBlock>();
+        const result: BasicBlock[] = [];
+
+        // Helper to check if we can reach a block without going through our target
+        const canReachWithoutTarget = (start: BasicBlock, target: BasicBlock): boolean => {
+            if (start === target) return false;
+            if (start === entry) return true;
+            if (seen.has(start)) return false;
+
+            seen.add(start);
+            return start.predecessors.some(pred => canReachWithoutTarget(pred, target));
+        };
+
+        // Only include predecessors that can be reached from entry without going through block
+        for (const pred of block.predecessors) {
+            seen.clear();
+            if (canReachWithoutTarget(pred, block)) {
+                result.push(pred);
+            }
+        }
+
+        return result;
     }
 }

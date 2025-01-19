@@ -34,10 +34,10 @@ export class Call extends Expression {
                 code.whitespace(1);
             }
 
-            if ('reg' in a.location) {
-                decomp.getRegister(a.location.reg, this.address).generate(code);
+            if (typeof a.location === 'number') {
+                decomp.getStack(a.location, this.address).generate(code);
             } else {
-                decomp.getStack(a.location.offset, this.address).generate(code);
+                decomp.getRegister(a.location, this.address).generate(code);
             }
         });
         code.punctuation(')');
@@ -52,11 +52,10 @@ export class Call extends Expression {
 
         const args: Expression[] = func.signature.arguments.map(a => {
             decomp.currentAddress = this.address;
-            if ('reg' in a.location) {
-                return decomp.getRegister(a.location.reg);
+            if (typeof a.location === 'number') {
+                return decomp.getStack(a.location, this.address);
             }
-
-            return decomp.getStack(a.location.offset, this.address);
+            return decomp.getRegister(a.location);
         });
 
         return `${func.name}(${args.map(a => a.toString()).join(', ')})`;

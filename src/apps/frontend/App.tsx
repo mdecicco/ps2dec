@@ -6,6 +6,7 @@ import { AppProvider, MemoryProvider } from 'apps/frontend/context';
 import { useProject } from 'apps/frontend/hooks/useProject';
 import Messager from 'apps/frontend/message';
 import { darkTheme } from 'apps/frontend/theme';
+import { ControlFlowView } from 'apps/frontend/views/ControlFlowView';
 import { DecompilationView } from 'apps/frontend/views/DecompilationView';
 import { DisassemblyView } from 'apps/frontend/views/DisassemblyView';
 import { FunctionView } from 'apps/frontend/views/FunctionView';
@@ -34,6 +35,12 @@ const TopLevel: React.FC<TopLevelProps> = props => {
             );
         case 'functions':
             return <FunctionView />;
+        case 'control-flow':
+            return (
+                <MemoryProvider withData={true}>
+                    <ControlFlowView />
+                </MemoryProvider>
+            );
     }
 };
 

@@ -1,4 +1,6 @@
-import { CodeBuilder, DataType, DecompVariable } from 'decompiler';
+import { CodeBuilder, Value } from 'decompiler';
+import { DataType } from 'typesys';
+
 import { Expression } from './base';
 
 export class RawString extends Expression {
@@ -27,9 +29,9 @@ export class RawString extends Expression {
 }
 
 export class Variable extends Expression {
-    private m_value: DecompVariable;
+    private m_value: Value;
 
-    constructor(value: DecompVariable) {
+    constructor(value: Value) {
         super();
         this.m_value = value;
         this.type = value.type;

@@ -1,6 +1,6 @@
 import { Tooltip } from '@mui/material';
-import { DataType, PrimitiveType } from 'decompiler';
 import React from 'react';
+import { DataType, PrimitiveType } from 'typesys';
 
 type InfoRowProps = {
     children: React.ReactNode;

@@ -1,20 +1,4 @@
-import { useProject } from 'apps/frontend/hooks';
-import Messager from 'apps/frontend/message';
-import {
-    ArrayType,
-    BitfieldType,
-    Decompiler,
-    EnumType,
-    Func,
-    FunctionSignatureType,
-    Method,
-    PointerType,
-    PrimitiveType,
-    StructureType,
-    TypeInheritance,
-    TypeSystem,
-    VTable
-} from 'decompiler';
+import { Decompiler } from 'decompiler';
 import React from 'react';
 import {
     DataTypeModel,
@@ -28,6 +12,23 @@ import {
     isStructureType,
     VTableModel
 } from 'types';
+import {
+    ArrayType,
+    BitfieldType,
+    EnumType,
+    Func,
+    FunctionSignatureType,
+    Method,
+    PointerType,
+    PrimitiveType,
+    StructureType,
+    TypeInheritance,
+    TypeSystem,
+    VTable
+} from 'typesys';
+
+import { useProject } from 'apps/frontend/hooks';
+import Messager from 'apps/frontend/message';
 
 const ts = TypeSystem.get();
 ts.initialize();
@@ -76,7 +77,6 @@ function transformFunction(func: FunctionModel) {
         isConstructor: func.isConstructor,
         isDestructor: func.isDestructor,
         name: func.name,
-        retLocation: func.signature.callConfig.returnValueLocation,
         signatureId: func.signatureId,
         methodInfo: func.methodOfId
             ? {
@@ -88,13 +88,7 @@ function transformFunction(func: FunctionModel) {
                         }
                       : null
               }
-            : null,
-        args: func.signature.arguments.map((a, idx) => ({
-            name: `param_${idx + 1}`,
-            typeId: a.typeId,
-            ssaLocations: [],
-            ssaVersions: []
-        }))
+            : null
     });
 }
 

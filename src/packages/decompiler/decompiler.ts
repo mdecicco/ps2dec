@@ -1,9 +1,10 @@
 import { Expr, i, Op, Reg } from 'decoder';
+import { Location, VersionedLocation } from 'types';
+
 import { ASTAnalyzer } from './analysis/ast';
 import { ControlFlowAnalyzer } from './analysis/flow';
-import { DecompVariable } from './analysis/vardb';
+import { Value } from './analysis/vardb';
 import { CodeBuilder } from './codegen/codebuilder';
-import { Location, VersionedLocation } from './common';
 import { DecompilerCache, IDataSource } from './input';
 
 export class Decompiler {
@@ -259,7 +260,7 @@ export class DecompilerInstance {
         return builder;
     }
 
-    promote(location: Location | VersionedLocation, name?: string): DecompVariable {
+    promote(location: Location | VersionedLocation, name?: string): Value {
         if (typeof location !== 'number' && 'version' in location) {
             return this.vars.promote(location, name);
         }

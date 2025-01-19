@@ -1,6 +1,7 @@
 import { Expr, i } from 'decoder';
-import { DecompVariable } from 'packages/decompiler/analysis';
-import { InductionVariable } from '../analysis/flow_loops';
+
+import { BasicBlock, Value } from '../analysis';
+import { InductionVariable } from '../types';
 import * as nodes from './nodes';
 
 export class ASTBuilder {
@@ -47,7 +48,7 @@ export class ASTBuilder {
      * Create a variable declaration node
      */
     createVariableDeclaration(
-        variable: DecompVariable,
+        variable: Value,
         initializer: nodes.ExpressionNode | null
     ): nodes.VariableDeclarationNode {
         return {
@@ -62,6 +63,7 @@ export class ASTBuilder {
      * Create a for loop node
      */
     createForLoop(
+        header: BasicBlock,
         init: nodes.StatementNode | null,
         condition: nodes.ExpressionNode,
         step: nodes.ExpressionNode | null,
@@ -70,6 +72,7 @@ export class ASTBuilder {
     ): nodes.ForLoopNode {
         const node: nodes.ForLoopNode = {
             type: nodes.NodeType.ForLoop,
+            header,
             parent: null,
             init,
             condition,
@@ -88,9 +91,10 @@ export class ASTBuilder {
     /**
      * Create a while loop node
      */
-    createWhileLoop(condition: nodes.ExpressionNode, body: nodes.BlockNode): nodes.WhileLoopNode {
+    createWhileLoop(header: BasicBlock, condition: nodes.ExpressionNode, body: nodes.BlockNode): nodes.WhileLoopNode {
         const node: nodes.WhileLoopNode = {
             type: nodes.NodeType.WhileLoop,
+            header,
             parent: null,
             condition,
             body
@@ -103,9 +107,14 @@ export class ASTBuilder {
     /**
      * Create a do-while loop node
      */
-    createDoWhileLoop(condition: nodes.ExpressionNode, body: nodes.BlockNode): nodes.DoWhileLoopNode {
+    createDoWhileLoop(
+        header: BasicBlock,
+        condition: nodes.ExpressionNode,
+        body: nodes.BlockNode
+    ): nodes.DoWhileLoopNode {
         const node: nodes.DoWhileLoopNode = {
             type: nodes.NodeType.DoWhileLoop,
+            header,
             parent: null,
             condition,
             body
@@ -149,6 +158,18 @@ export class ASTBuilder {
         thenBody.parent = node;
         elseBody.parent = node;
         return node;
+    }
+
+    /**
+     * Create a goto node
+     */
+    createGoto(targetHeader: BasicBlock, branchInstr: i.Instruction): nodes.GoToNode {
+        return {
+            type: nodes.NodeType.GoTo,
+            parent: null,
+            targetHeader,
+            branchInstr
+        };
     }
 
     /**

@@ -3,7 +3,7 @@ import { parentPort, Worker } from 'worker_threads';
 import zlib from 'zlib';
 
 import { Action, ActionData, ActionEventMap } from 'apps/backend/actions/Action';
-import { createDatabase } from 'apps/backend/dal/db';
+import { createDatabase } from 'apps/backend/db';
 import { ActionEntity } from 'apps/backend/entities/action';
 import Messager from 'apps/backend/message';
 import { EventListener } from 'packages/utils/event';

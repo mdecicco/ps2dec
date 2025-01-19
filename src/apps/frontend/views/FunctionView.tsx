@@ -51,6 +51,7 @@ export const FunctionView: React.FC = () => {
             <View.Menu label='View'>
                 <View.MenuItem onClick={() => project.showView('disassembly')}>Disassembly</View.MenuItem>
                 <View.MenuItem onClick={() => project.showView('decompilation')}>Decompilation</View.MenuItem>
+                <View.MenuItem onClick={() => project.showView('control-flow')}>Control Flow</View.MenuItem>
                 <View.MenuItem onClick={() => Messager.send('openDevTools')}>Open DevTools</View.MenuItem>
             </View.Menu>
             <LoadBarrier isLoading={functions.loading} isLoaded={functions.data.length > 0} message='No Functions'>

@@ -22,7 +22,8 @@ export default defineConfig({
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
                 utils: path.resolve(__dirname, 'src/packages/utils'),
                 messages: path.resolve(__dirname, 'src/packages/messages'),
-                types: path.resolve(__dirname, 'src/packages/types')
+                types: path.resolve(__dirname, 'src/packages/types'),
+                typesys: path.resolve(__dirname, 'src/packages/typesys')
             }
         }
     },
@@ -44,7 +45,8 @@ export default defineConfig({
                 decoder: path.resolve(__dirname, 'src/packages/decoder'),
                 utils: path.resolve(__dirname, 'src/packages/utils'),
                 messages: path.resolve(__dirname, 'src/packages/messages'),
-                types: path.resolve(__dirname, 'src/packages/types')
+                types: path.resolve(__dirname, 'src/packages/types'),
+                typesys: path.resolve(__dirname, 'src/packages/typesys')
             }
         }
     }

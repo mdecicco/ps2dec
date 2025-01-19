@@ -1,7 +1,8 @@
 import { i } from 'decoder';
+
+import { ControlFlowGraph } from '../analysis/cfg';
 import * as nodes from '../ast/nodes';
 import { FunctionCode } from '../input';
-import { ControlFlowGraph } from './cfg';
 
 export interface IASTAnalyzerPlugin {
     /**

@@ -51,6 +51,8 @@ export const DecompilationView: React.FC = () => {
                 setCurrentFunction(func);
                 setError(null);
                 setDecompilation(output);
+
+                // console.log(output.code);
             } catch (e) {
                 console.error(`Failed to decompile function ${func.id}`, e);
                 if (e instanceof Error) {
@@ -95,6 +97,7 @@ export const DecompilationView: React.FC = () => {
             <View.Menu label='View'>
                 <View.MenuItem onClick={() => project.showView('disassembly')}>Disassembly</View.MenuItem>
                 <View.MenuItem onClick={() => project.showView('functions')}>Functions</View.MenuItem>
+                <View.MenuItem onClick={() => project.showView('control-flow')}>Control Flow</View.MenuItem>
                 <View.MenuItem onClick={() => Messager.send('openDevTools')}>Open DevTools</View.MenuItem>
             </View.Menu>
             <ElfBarrier>

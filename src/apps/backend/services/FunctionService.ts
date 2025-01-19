@@ -1,7 +1,8 @@
+import { DataSource, Repository } from 'typeorm';
+import { Func, FunctionSignatureType, Method, MethodSignatureType, TypeSystem } from 'typesys';
+
 import { FunctionCallEntity, FunctionEntity } from 'apps/backend/entities';
 import Messager from 'apps/backend/message';
-import { Func, FunctionSignatureType, Method, MethodSignatureType, TypeSystem } from 'decompiler';
-import { DataSource, Repository } from 'typeorm';
 
 export class FunctionService {
     private static m_repo: Repository<FunctionEntity>;
@@ -130,9 +131,9 @@ export class FunctionService {
         let result: Func | Method;
 
         if (func.methodOfId) {
-            result = new Method(func.id, func.address, sig as MethodSignatureType);
+            result = new Method(func.id, func.address, func.endAddress, sig as MethodSignatureType);
         } else {
-            result = new Func(func.id, func.address, sig as FunctionSignatureType);
+            result = new Func(func.id, func.address, func.endAddress, sig as FunctionSignatureType);
         }
 
         FunctionService.m_tsMap.set(func.id, result);

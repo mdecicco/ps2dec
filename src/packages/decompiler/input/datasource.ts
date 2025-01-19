@@ -1,6 +1,7 @@
 import { i } from 'decoder';
-import { DecompilerCache } from 'packages/decompiler/input';
-import { Func, Method } from '../typesys';
+import { Func, Method } from 'typesys';
+
+import { DecompilerCache } from './cache';
 
 export interface IDataSource {
     findFunctionByAddress: (address: number) => Func | Method | null;

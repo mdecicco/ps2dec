@@ -1,1 +1,1 @@
-export type ViewId = 'welcome' | 'disassembly' | 'functions' | 'decompilation';
+export type ViewId = 'welcome' | 'disassembly' | 'functions' | 'decompilation' | 'control-flow';

@@ -1,4 +1,5 @@
 import { Decompiler } from 'decompiler';
+
 import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
@@ -31,12 +32,12 @@ export class b extends Instruction {
         return instruction.code === Op.Code.b;
     }
 
-    constructor(address: number, target: number) {
+    constructor(address: number, target: number, orig: Instruction) {
         super({
             address,
             code: Op.Code.b,
             codeStr: 'b',
-            machineCode: 0,
+            machineCode: orig.rawMachineCode,
             operands: [target],
             reads: [],
             writes: [],
@@ -54,12 +55,12 @@ export class move extends Instruction {
         return instruction.code === Op.Code.move;
     }
 
-    constructor(address: number, dest: Reg.Register, src: Reg.Register) {
+    constructor(address: number, dest: Reg.Register, src: Reg.Register, orig: Instruction) {
         super({
             address,
             code: Op.Code.move,
             codeStr: 'move',
-            machineCode: 0,
+            machineCode: orig.rawMachineCode,
             operands: [dest, src],
             reads: [src],
             writes: [dest]
@@ -78,12 +79,12 @@ export class li extends Instruction {
         return instruction.code === Op.Code.li;
     }
 
-    constructor(address: number, dest: Reg.Register, val: number) {
+    constructor(address: number, dest: Reg.Register, val: number, orig: Instruction) {
         super({
             address,
             code: Op.Code.li,
             codeStr: 'li',
-            machineCode: 0,
+            machineCode: orig.rawMachineCode,
             operands: [dest, val],
             reads: [],
             writes: [dest]

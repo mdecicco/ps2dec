@@ -1,4 +1,6 @@
-import { CodeBuilder, DataType, PrimitiveType, TypeSystem } from 'decompiler';
+import { CodeBuilder } from 'decompiler';
+import { DataType, PrimitiveType, TypeSystem } from 'typesys';
+
 import { Expression } from './base';
 import { BinaryExpression } from './binary';
 import { Imm } from './immediate';

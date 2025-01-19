@@ -1,6 +1,7 @@
 import { Expr, i } from 'decoder';
-import { DecompVariable } from 'packages/decompiler/analysis';
-import { InductionVariable } from '../analysis/flow_loops';
+
+import { BasicBlock, Value } from '../analysis';
+import { InductionVariable } from '../types';
 
 export enum NodeType {
     Block = 'Block',
@@ -11,7 +12,8 @@ export enum NodeType {
     If = 'If',
     IfElse = 'IfElse',
     Expression = 'Expression',
-    VariableDeclaration = 'VariableDeclaration'
+    VariableDeclaration = 'VariableDeclaration',
+    GoTo = 'GoTo'
 }
 
 export interface ASTNode {
@@ -38,6 +40,7 @@ export interface StatementNode extends ASTNode {
 
 export interface ForLoopNode extends ASTNode {
     type: NodeType.ForLoop;
+    header: BasicBlock;
     init: StatementNode | null;
     condition: ExpressionNode;
     step: ExpressionNode | null;
@@ -47,12 +50,14 @@ export interface ForLoopNode extends ASTNode {
 
 export interface WhileLoopNode extends ASTNode {
     type: NodeType.WhileLoop;
+    header: BasicBlock;
     condition: ExpressionNode;
     body: BlockNode;
 }
 
 export interface DoWhileLoopNode extends ASTNode {
     type: NodeType.DoWhileLoop;
+    header: BasicBlock;
     condition: ExpressionNode;
     body: BlockNode;
 }
@@ -72,18 +77,27 @@ export interface IfElseNode extends ASTNode {
 
 export interface VariableDeclarationNode extends ASTNode {
     type: NodeType.VariableDeclaration;
-    variable: DecompVariable;
+    variable: Value;
     initializer: ExpressionNode | null;
+}
+
+export interface GoToNode extends ASTNode {
+    type: NodeType.GoTo;
+    targetHeader: BasicBlock;
+    branchInstr: i.Instruction;
 }
 
 export type Statement =
     | ExpressionNode
+    | BlockNode
     | ForLoopNode
     | WhileLoopNode
     | DoWhileLoopNode
     | IfNode
     | IfElseNode
-    | VariableDeclarationNode;
+    | VariableDeclarationNode
+    | GoToNode;
+
 export type Node =
     | ExpressionNode
     | BlockNode
@@ -93,4 +107,5 @@ export type Node =
     | DoWhileLoopNode
     | IfNode
     | IfElseNode
-    | VariableDeclarationNode;
+    | VariableDeclarationNode
+    | GoToNode;

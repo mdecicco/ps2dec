@@ -1,5 +1,5 @@
 import { Reg } from 'decoder';
-import { Location, VersionedLocation } from 'decompiler';
+import { Location, VersionedLocation } from 'types';
 
 export * from './elf';
 export * from './event';

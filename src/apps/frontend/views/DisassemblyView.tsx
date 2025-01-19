@@ -25,7 +25,8 @@ export const DisassemblyView: React.FC = () => {
     React.useEffect(() => {
         if (totalRows > 0 && !didGo) {
             setDidGo(true);
-            Messager.send('gotoAddress', 0x00101480);
+            // Messager.send('gotoAddress', 0x00101480);
+            Messager.send('gotoAddress', 0x001016a8);
         }
     }, [totalRows, didGo]);
 
@@ -149,6 +150,7 @@ export const DisassemblyView: React.FC = () => {
             <View.Menu label='View'>
                 <View.MenuItem onClick={() => project.showView('functions')}>Functions</View.MenuItem>
                 <View.MenuItem onClick={() => project.showView('decompilation')}>Decompilation</View.MenuItem>
+                <View.MenuItem onClick={() => project.showView('control-flow')}>Control Flow</View.MenuItem>
                 <View.MenuItem onClick={() => Messager.send('openDevTools')}>Open DevTools</View.MenuItem>
             </View.Menu>
             <ElfBarrier>

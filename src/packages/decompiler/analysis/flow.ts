@@ -1,222 +1,114 @@
 import { Expr, i, Op, Reg } from 'decoder';
-import { PrimitiveType } from 'decompiler';
-import { compareVersionedLocations, formatVersionedLocation } from 'utils';
+import { PrimitiveType } from 'typesys';
+
 import { ASTBuilder } from '../ast/builder';
 import * as nodes from '../ast/nodes';
 import { CodeBuilder } from '../codegen/codebuilder';
-import { Location } from '../common';
 import { Decompiler } from '../decompiler';
 import { FunctionCode } from '../input';
+import { IfRegion, LoopRegion, Region } from '../types';
 import { BasicBlock, ControlFlowGraph } from './cfg';
-import { BranchAnalyzer, BranchChain, IfStatement } from './flow_branches';
-import { Loop, LoopAnalyzer, LoopType } from './flow_loops';
+import * as Pass from './passes';
+import { StructureAnalyzer } from './structure';
+import { IStructurePass } from './structure_pass';
 
 export class ControlFlowAnalyzer {
-    private m_loops: Loop[] = [];
-    private m_branches: IfStatement[] = [];
-    private m_branchChains: BranchChain[] = [];
-    private m_builder: ASTBuilder = new ASTBuilder();
-    private m_astLoopStack: Loop[] = [];
+    private m_builder: ASTBuilder;
+    private m_loopRegionStack: LoopRegion[];
+    private m_loopHeaderStack: BasicBlock[];
+    private m_structurePasses: IStructurePass[];
     private m_func: FunctionCode;
     private m_cfg: ControlFlowGraph;
 
     constructor(func: FunctionCode) {
+        this.m_builder = new ASTBuilder();
+        this.m_loopRegionStack = [];
+        this.m_loopHeaderStack = [];
+        this.m_structurePasses = [];
         this.m_func = func;
         this.m_cfg = func.cfg;
+
+        this.m_structurePasses.push(
+            new Pass.Structure.SimplifyBranches(),
+            new Pass.Structure.SequenceMerge(),
+            new Pass.Structure.BlockMerge(),
+            new Pass.Structure.EliminateUnreachable()
+        );
     }
 
-    analyze() {
-        // Find loops first
-        const loopAnalyzer = new LoopAnalyzer(this.m_func);
-        this.m_loops = loopAnalyzer.findLoops();
-
-        // Get all loop branch instructions
-        const loopBranches = this.m_loops.flatMap(loop => (loop.condition ? [loop.condition.instruction] : []));
-
-        // Find non-loop branches
-        const branchAnalyzer = new BranchAnalyzer(this.m_cfg, loopBranches);
-        const branchResult = branchAnalyzer.findBranches();
-        this.m_branches = branchResult.branches;
-        this.m_branchChains = branchResult.chains;
-    }
+    analyze() {}
 
     buildAST(): nodes.BlockNode {
-        this.m_astLoopStack = [];
-        return this.processBlocks(new Set(this.m_cfg.getAllBlocks()));
-    }
+        this.m_loopRegionStack = [];
 
-    private processBlocks(blocks: Set<BasicBlock>, currentStructure?: Loop | IfStatement): nodes.BlockNode {
-        // Find structures contained within these blocks, excluding the current structure
-        const containedLoops = this.m_loops.filter(
-            loop => loop !== currentStructure && Array.from(loop.blocks).every(b => blocks.has(b))
-        );
+        const structureAnalyzer = new StructureAnalyzer(this.m_func);
+        let root = structureAnalyzer.analyze();
 
-        const containedBranches = this.m_branches.filter(
-            branch => branch !== currentStructure && blocks.has(this.m_cfg.getBlock(branch.condition.address)!)
-        );
-
-        // Get outermost structures
-        const outerLoops = containedLoops.filter(
-            loop => !this.isContainedInAnyStructure(loop, containedLoops, containedBranches)
-        );
-
-        const outerBranches = containedBranches.filter(
-            branch => !this.isContainedInAnyStructure(branch, containedLoops, containedBranches)
-        );
-
-        // Sort structures by address
-        const structures = [
-            ...outerLoops.map(l => ({ type: 'loop' as const, struct: l })),
-            ...outerBranches.map(b => ({ type: 'branch' as const, struct: b }))
-        ].sort((a, b) => this.getStructureAddress(a) - this.getStructureAddress(b));
-
-        // Process blocks and structures in order
-        const statements: nodes.StatementNode[] = [];
-        let remainingBlocks = new Set(blocks);
-
-        for (const struct of structures) {
-            // Add statements from blocks before this structure
-            const structAddr = this.getStructureAddress(struct);
-            const preBlocks = this.getBlocksBefore(remainingBlocks, structAddr);
-            if (preBlocks.size > 0) {
-                // If the blocks have any phi nodes that don't get initialized to a value
-                // within the preBlocks, we need to declare them as variables.
-
-                const preInstructions: i.Instruction[] = [];
-                for (const block of preBlocks) {
-                    const phis = this.m_func.getBlockPhis(block);
-                    for (const phi of phis) {
-                        let wasDefined = false;
-                        block.each(instr => {
-                            const defs = this.m_func.getDefs(instr);
-
-                            for (const phiDef of phi.definitions) {
-                                for (const instDef of defs) {
-                                    if (compareVersionedLocations(phiDef, instDef)) {
-                                        // Phi has a definition in this block, don't declare it now because an instruction will
-                                        // generate it later with an initialization.
-                                        wasDefined = true;
-                                        return true;
-                                    }
-                                }
-                            }
-                        });
-
-                        if (!wasDefined) {
-                            // If the phi node is not defined in this block, we need to declare it as a variable
-                            statements.push(
-                                this.m_builder.createStatement(
-                                    this.m_builder.createVariableDeclaration(phi.variable.value, null)
-                                )
-                            );
-                        }
-                    }
-
-                    block.each(instr => {
-                        preInstructions.push(instr);
-                    });
-                }
-
-                statements.push(...this.instructionsToStatements(preInstructions));
-                preBlocks.forEach(b => remainingBlocks.delete(b));
-            }
-
-            // Process the structure
-            if (struct.type === 'loop') {
-                statements.push(this.buildLoopNode(struct.struct, remainingBlocks));
-                struct.struct.blocks.forEach(b => remainingBlocks.delete(b));
-            } else {
-                statements.push(this.buildBranchNode(struct.struct, remainingBlocks));
-                struct.struct.thenBlocks.forEach(b => remainingBlocks.delete(b));
-                struct.struct.elseBlocks.forEach(b => remainingBlocks.delete(b));
-            }
-        }
-
-        // Add statements from any remaining blocks
-        if (remainingBlocks.size > 0) {
-            const remainingInstructions: i.Instruction[] = [];
-            for (const block of remainingBlocks) {
-                const phis = this.m_func.getBlockPhis(block);
-
-                for (const phi of phis) {
-                    let wasDefined = false;
-                    block.each(instr => {
-                        const defs = this.m_func.getDefs(instr);
-
-                        for (const phiDef of phi.definitions) {
-                            for (const instDef of defs) {
-                                if (compareVersionedLocations(phiDef, instDef)) {
-                                    // Phi has a definition in this block, don't declare it now because an instruction will
-                                    // generate it later with an initialization.
-                                    wasDefined = true;
-                                    return true;
-                                }
-                            }
-                        }
-                    });
-
-                    if (!wasDefined) {
-                        // If the phi node is not defined in this block, we need to declare it as a variable
-                        statements.push(
-                            this.m_builder.createStatement(
-                                this.m_builder.createVariableDeclaration(phi.variable.value, null)
-                            )
-                        );
-                    }
-                }
-
-                block.each(instr => {
-                    remainingInstructions.push(instr);
+        let changed: boolean;
+        do {
+            changed = false;
+            this.m_structurePasses.forEach(p => {
+                p.initialize({
+                    func: this.m_func,
+                    regionMap: structureAnalyzer.regionMap,
+                    root
                 });
-            }
 
-            statements.push(...this.instructionsToStatements(remainingInstructions));
-        }
+                changed ||= p.execute(root);
 
-        return this.m_builder.createBlock(statements);
+                root = p.root;
+            });
+        } while (changed);
+
+        // StructureAnalyzer.debugPrint(root);
+        console.log(root);
+
+        return this.m_builder.createBlock([this.processRegion(root)]);
     }
 
-    private getBlocksBefore(blocks: Set<BasicBlock>, address: number): Set<BasicBlock> {
-        const result = new Set<BasicBlock>();
-        for (const block of blocks) {
-            if (block.startAddress < address) {
-                result.add(block);
+    //
+    // CFG -> Loops, Branches
+    //
+
+    private processRegion(region: Region): nodes.StatementNode {
+        switch (region.type) {
+            case 'sequence': {
+                const statements: nodes.StatementNode[] = [];
+
+                region.sequence.forEach(stmt => {
+                    statements.push(this.processRegion(stmt));
+                });
+
+                return this.m_builder.createStatement(this.m_builder.createBlock(statements));
+            }
+            case 'block': {
+                return this.m_builder.createStatement(
+                    this.m_builder.createBlock(this.instructionsToStatements(region.instructions))
+                );
+            }
+            case 'if': {
+                return this.buildBranchNode(region);
+            }
+            case 'loop': {
+                return this.buildLoopNode(region);
+            }
+            case 'ref': {
+                return this.m_builder.createStatement(
+                    this.m_builder.createGoto(region.targetHeader, region.branchInstr)
+                );
             }
         }
-        return result;
     }
 
-    private isContainedInAnyStructure(structure: Loop | IfStatement, loops: Loop[], branches: IfStatement[]): boolean {
-        if ('joinBlock' in structure) {
-            const condBlock = this.m_cfg.getBlock(structure.condition.address)!;
-
-            // Check if contained in any loop
-            if (loops.some(loop => loop.blocks.has(condBlock))) {
-                return true;
-            }
-
-            // Check if contained in another branch
-            return branches.some(
-                other => other !== structure && (other.thenBlocks.has(condBlock) || other.elseBlocks.has(condBlock))
-            );
-        }
-
-        const blocks = Array.from(structure.blocks);
-
-        // Check if contained in another loop
-        if (loops.some(other => other !== structure && blocks.every(b => other.blocks.has(b)))) {
-            return true;
-        }
-
-        // Check if contained in any branch
-        return branches.some(other => blocks.every(b => other.thenBlocks.has(b) || other.elseBlocks.has(b)));
-    }
+    //
+    // CFG, Loops, Branches -> AST
+    //
 
     private instructionsToStatements(instructions: i.Instruction[]): nodes.StatementNode[] {
         const decomp = Decompiler.current;
         const stmts: nodes.StatementNode[] = [];
 
-        const allowedBranches = new Set([Op.Code.b, Op.Code.jal, Op.Code.jalr, Op.Code.j, Op.Code.jr]);
+        const allowedBranches = new Set([Op.Code.jal, Op.Code.jalr, Op.Code.jr]);
 
         const handleInstr = (instr: i.Instruction) => {
             if (instr.isBranch && !allowedBranches.has(instr.code)) return;
@@ -224,20 +116,28 @@ export class ControlFlowAnalyzer {
             if (decomp.isAddressIgnored(instr.address)) return;
 
             // If this is the step instruction for any loop we're in, skip it
-            if (this.m_astLoopStack.some(loop => loop.inductionVar?.stepInstruction === instr)) return;
+            const isLoopIncrement = this.m_loopRegionStack.some(loop => {
+                if (!loop.condition) return false;
+
+                const condBlock = this.m_cfg.getBlock(loop.condition.address);
+                const isForLoop =
+                    condBlock &&
+                    condBlock === loop.header &&
+                    loop.inductionVar &&
+                    (loop.inductionVar.initInstruction || loop.inductionVar.stepInstruction);
+                if (!isForLoop) return false;
+
+                return loop.inductionVar!.stepInstruction === instr;
+            });
+            if (isLoopIncrement) return;
 
             if (instr.code === Op.Code.jr && Reg.compare(instr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })) {
                 let retString = 'return';
 
                 const currentFunc = decomp.cache.func;
                 if (currentFunc.returnLocation) {
-                    if ('reg' in currentFunc.returnLocation) {
-                        const returnExpr = this.m_func.getValueAt(currentFunc.returnLocation.reg, instr.address);
-                        retString += ` ${returnExpr}`;
-                    } else {
-                        const returnExpr = this.m_func.getValueAt(currentFunc.returnLocation.offset, instr.address);
-                        retString += ` ${returnExpr}`;
-                    }
+                    const returnExpr = this.m_func.getValueAt(currentFunc.returnLocation, instr.address);
+                    retString += ` ${returnExpr}`;
                 }
 
                 const stmt = this.m_builder.createStatement(
@@ -248,12 +148,7 @@ export class ControlFlowAnalyzer {
                             if (currentFunc.returnLocation) {
                                 code.whitespace(1);
 
-                                let retExpr: Expr.Expression | null = null;
-                                if ('reg' in currentFunc.returnLocation) {
-                                    retExpr = this.m_func.getValueAt(currentFunc.returnLocation.reg, instr.address);
-                                } else {
-                                    retExpr = this.m_func.getValueAt(currentFunc.returnLocation.offset, instr.address);
-                                }
+                                let retExpr = this.m_func.getValueAt(currentFunc.returnLocation, instr.address);
 
                                 if (retExpr) code.expression(retExpr);
                                 else code.comment('Failed to determine return value');
@@ -276,13 +171,7 @@ export class ControlFlowAnalyzer {
                 const target = instr.operands[instr.operands.length - 1] as number;
                 const func = Decompiler.findFunctionByAddress(target);
                 if (func && func.returnLocation) {
-                    let location: Location;
-                    if ('reg' in func.returnLocation) {
-                        location = func.returnLocation.reg;
-                    } else {
-                        location = func.returnLocation.offset;
-                    }
-
+                    let location = func.returnLocation;
                     const def = this.m_func.getDef(instr, location);
                     if (this.m_func.getUsesOf(def).length > 0) omit = true;
                 }
@@ -304,42 +193,49 @@ export class ControlFlowAnalyzer {
         return stmts;
     }
 
-    private getStructureAddress(
-        struct: { type: 'loop'; struct: Loop } | { type: 'branch'; struct: IfStatement }
-    ): number {
-        if (struct.type === 'loop') {
-            return struct.struct.header.startAddress;
-        } else {
-            return struct.struct.condition.address;
-        }
-    }
-
-    private buildLoopNode(loop: Loop, remainingBlocks: Set<BasicBlock>): nodes.StatementNode {
-        this.m_astLoopStack.push(loop);
-        const bodyBlocks = new Set(Array.from(remainingBlocks).filter(b => loop.blocks.has(b)));
-        const body = this.processBlocks(bodyBlocks, loop);
+    private buildLoopNode(loop: LoopRegion): nodes.StatementNode {
+        this.m_loopRegionStack.push(loop);
+        const body = this.m_builder.createBlock([this.processRegion(loop.body)]);
 
         // Get condition expression
-        let condition = loop.condition?.instruction.generate();
+        let condition = loop.condition?.generate();
         if (condition instanceof Expr.ConditionalBranch) {
             condition = condition.condition;
         }
 
-        const condExpr = this.m_builder.createExpression(loop.condition!.instruction, false, () => {
-            let expr = loop.condition!.instruction.generate();
-            if (!expr) return null;
+        let condExpr: nodes.ExpressionNode;
 
-            if (expr instanceof Expr.ConditionalBranch) {
-                expr = expr.condition;
+        if (loop.condition) {
+            condExpr = this.m_builder.createExpression(loop.condition!, false, () => {
+                let expr = loop.condition!.generate();
+                if (!expr) return null;
+
+                if (expr instanceof Expr.ConditionalBranch) {
+                    expr = expr.condition;
+                }
+
+                expr.address = loop.condition!.address;
+                return expr;
+            });
+        } else {
+            condExpr = this.m_builder.createExpression(new i.nop(loop.header.startAddress), false, () => {
+                const result = Expr.Imm.bool(true);
+                result.address = loop.header.startAddress;
+                return result;
+            });
+        }
+
+        if (loop.condition) {
+            const condBlock = this.m_cfg.getBlock(loop.condition.address);
+            if (condBlock !== loop.header) {
+                const stmt = this.m_builder.createStatement(
+                    this.m_builder.createDoWhileLoop(loop.header, condExpr, body)
+                );
+                this.m_loopRegionStack.pop();
+                return stmt;
             }
 
-            expr.address = loop.condition!.instruction.address;
-            return expr;
-        });
-
-        switch (loop.type) {
-            case LoopType.For: {
-                // get expression that corresponds to induction variable initialization
+            if (loop.inductionVar && (loop.inductionVar.initInstruction || loop.inductionVar.stepInstruction)) {
                 const initInstr = loop.inductionVar!.initInstruction;
                 const stepInstr = loop.inductionVar!.stepInstruction;
 
@@ -364,49 +260,32 @@ export class ControlFlowAnalyzer {
                       })
                     : null;
                 const stmt = this.m_builder.createStatement(
-                    this.m_builder.createForLoop(init, condExpr, step, body, loop.inductionVar!)
+                    this.m_builder.createForLoop(loop.header, init, condExpr, step, body, loop.inductionVar!)
                 );
 
-                this.m_astLoopStack.pop();
+                this.m_loopRegionStack.pop();
                 return stmt;
             }
-
-            case LoopType.While: {
-                const stmt = this.m_builder.createStatement(this.m_builder.createWhileLoop(condExpr, body));
-                this.m_astLoopStack.pop();
-                return stmt;
-            }
-
-            case LoopType.DoWhile: {
-                const stmt = this.m_builder.createStatement(this.m_builder.createDoWhileLoop(condExpr, body));
-                this.m_astLoopStack.pop();
-                return stmt;
-            }
-
-            default:
-                // Fallback to while loop
-                const stmt = this.m_builder.createStatement(this.m_builder.createWhileLoop(condExpr, body));
-                this.m_astLoopStack.pop();
-                return stmt;
         }
+
+        const stmt = this.m_builder.createStatement(this.m_builder.createWhileLoop(loop.header, condExpr, body));
+        this.m_loopRegionStack.pop();
+        return stmt;
     }
 
-    private buildBranchNode(branch: IfStatement, remainingBlocks: Set<BasicBlock>): nodes.StatementNode {
-        const thenBlocks = new Set(Array.from(remainingBlocks).filter(b => branch.thenBlocks.has(b)));
-        const elseBlocks = new Set(Array.from(remainingBlocks).filter(b => branch.elseBlocks.has(b)));
-
-        let thenBody = thenBlocks.size > 0 ? this.processBlocks(thenBlocks, branch) : undefined;
-        let elseBody = elseBlocks.size > 0 ? this.processBlocks(elseBlocks, branch) : undefined;
+    private buildBranchNode(region: IfRegion): nodes.StatementNode {
+        let thenBody = this.m_builder.createBlock([this.processRegion(region.thenRegion)]);
+        let elseBody = region.elseRegion ? this.m_builder.createBlock([this.processRegion(region.elseRegion)]) : null;
 
         // Get condition expression
-        let condition = branch.condition.generate();
+        let condition = region.condition.generate();
         if (condition) condition = condition.reduce();
         if (condition instanceof Expr.ConditionalBranch) {
             condition = condition.condition.reduce();
         }
 
-        const condExpr = this.m_builder.createExpression(branch.condition, false, () => {
-            const cond = branch.condition.generate();
+        const condExpr = this.m_builder.createExpression(region.condition, false, () => {
+            const cond = region.condition.generate();
             if (!cond) return null;
             let expr = cond;
 
@@ -414,9 +293,9 @@ export class ControlFlowAnalyzer {
             if (expr instanceof Expr.ConditionalBranch) {
                 expr = expr.condition.reduce();
             }
-            expr.address = branch.condition.address;
+            expr.address = region.condition.address;
 
-            if (!thenBody && elseBody) {
+            if (region.invertCondition) {
                 // If block with inverted condition
                 if (Expr.isLogical(expr)) expr = expr.logicalInversion();
                 else expr = new Expr.Not(expr).copyFrom(expr);
@@ -429,22 +308,18 @@ export class ControlFlowAnalyzer {
             return expr;
         });
 
-        if (!thenBody && elseBody) {
-            return this.m_builder.createStatement(this.m_builder.createIf(condExpr, elseBody));
-        }
-
-        if (thenBody && !elseBody) {
+        if (!elseBody) {
             // Simple if with no else
             return this.m_builder.createStatement(this.m_builder.createIf(condExpr, thenBody));
-        }
-
-        if (!(thenBody && elseBody)) {
-            throw new Error('No then or else body found for branch');
         }
 
         // If-else
         return this.m_builder.createStatement(this.m_builder.createIfElse(condExpr, thenBody, elseBody));
     }
+
+    //
+    // AST -> Code
+    //
 
     public generateCondition(cond: Expr.Expression | null, code: CodeBuilder, invert?: boolean): void {
         if (!cond) return;
@@ -484,6 +359,7 @@ export class ControlFlowAnalyzer {
                 this.generateForLoop(ast, code);
                 break;
             case nodes.NodeType.WhileLoop:
+                this.m_loopHeaderStack.push(ast.header);
                 code.pushAddress(ast.condition.instruction.address);
                 code.keyword('while');
                 code.whitespace(1);
@@ -503,8 +379,10 @@ export class ControlFlowAnalyzer {
                 code.pushAddress(ast.condition.instruction.address);
                 code.punctuation('}');
                 code.popAddress();
+                this.m_loopHeaderStack.pop();
                 break;
             case nodes.NodeType.DoWhileLoop:
+                this.m_loopHeaderStack.push(ast.header);
                 code.pushAddress(ast.condition.instruction.address);
                 code.keyword('do');
                 code.whitespace(1);
@@ -526,6 +404,7 @@ export class ControlFlowAnalyzer {
                 this.generateCondition(ast.condition.expressionGen(), code);
                 code.punctuation(')');
                 code.popAddress();
+                this.m_loopHeaderStack.pop();
                 break;
             case nodes.NodeType.If:
                 code.pushAddress(ast.condition.instruction.address);
@@ -571,6 +450,21 @@ export class ControlFlowAnalyzer {
                     code.punctuation(';');
                 }
                 break;
+            case nodes.NodeType.GoTo:
+                code.pushAddress(ast.branchInstr.address);
+                if (
+                    this.m_loopHeaderStack.length > 0 &&
+                    this.m_loopHeaderStack[this.m_loopHeaderStack.length - 1] === ast.targetHeader
+                ) {
+                    code.keyword('continue');
+                    code.punctuation(';');
+                } else {
+                    code.keyword('goto');
+                    code.whitespace(1);
+                    code.miscReference(`LBL_${ast.targetHeader.startAddress.toString(16).padStart(8, '0')}`);
+                    code.punctuation(';');
+                }
+                code.popAddress();
         }
     }
 
@@ -587,29 +481,27 @@ export class ControlFlowAnalyzer {
             if (!variable) {
                 return;
             }
-            console.log(
-                `${ast.instruction.toString(true).padEnd(40, ' ')}: ${variable.toString()} (${formatVersionedLocation(
-                    def
-                )}) defined as ${def.assignedTo}`
-            );
+            // console.log(
+            //     `${ast.instruction.toString(true).padEnd(40, ' ')}: ${variable.toString()} (${formatVersionedLocation(
+            //         def
+            //     )}) defined as ${def.assignedTo}`
+            // );
 
             // If the variable is just being moved to another location, skip it
             if (def.assignedTo instanceof Expr.Variable && def.assignedTo.value === variable) return;
 
             const versions = variable.getSSAVersions(def.value).sort((a, b) => a - b);
-            if (versions[0] === def.version) {
-                if (!variable.hasDeclaration) {
-                    variable.hasDeclaration = true;
-                    // If it's the first one to write to the variable, declare it
-                    code.dataType(variable.type);
-                    code.whitespace(1);
-                    code.variable(variable);
-                    code.whitespace(1);
-                    code.punctuation('=');
-                    code.whitespace(1);
-                    code.expression(def.assignedTo);
-                    didDeclareOrAssign = true;
-                }
+            if (versions[0] === def.version && !variable.hasDeclaration) {
+                variable.hasDeclaration = true;
+                // If it's the first one to write to the variable, declare it
+                code.dataType(variable.type);
+                code.whitespace(1);
+                code.variable(variable);
+                code.whitespace(1);
+                code.punctuation('=');
+                code.whitespace(1);
+                code.expression(def.assignedTo);
+                didDeclareOrAssign = true;
             } else {
                 // Otherwise, just print the assignment
 
@@ -741,17 +633,10 @@ export class ControlFlowAnalyzer {
             // Find out if the register set by the call is used again
             const func = expr.target;
             if (func && func.returnLocation) {
-                if ('reg' in func.returnLocation) {
-                    const def = this.m_func.getDefAt(func.returnLocation.reg, ast.instruction.address);
-                    if (!def) throw new Error('Failed to find def for call return location');
+                const def = this.m_func.getDefAt(func.returnLocation, ast.instruction.address);
+                if (!def) throw new Error('Failed to find def for call return location');
 
-                    if (this.m_func.getUsesOf(def).length > 0) return false;
-                } else {
-                    const def = this.m_func.getDefAt(func.returnLocation.offset, ast.instruction.address);
-                    if (!def) throw new Error('Failed to find def for call return location');
-
-                    if (this.m_func.getUsesOf(def).length > 0) return false;
-                }
+                if (this.m_func.getUsesOf(def).length > 0) return false;
             }
         } else if (expr instanceof Expr.IndirectCall) {
             // Indirect calls are more complicated, just log it as is for now
@@ -768,6 +653,8 @@ export class ControlFlowAnalyzer {
     }
 
     private generateForLoop(ast: nodes.ForLoopNode, code: CodeBuilder): void {
+        this.m_loopHeaderStack.push(ast.header);
+
         code.pushAddress(ast.condition.instruction.address);
         code.keyword('for');
         code.whitespace(1);
@@ -810,6 +697,7 @@ export class ControlFlowAnalyzer {
         code.newLine();
         code.punctuation('}');
         code.popAddress();
+        this.m_loopHeaderStack.pop();
     }
 
     private generateIfElse(ast: nodes.IfElseNode, code: CodeBuilder): void {

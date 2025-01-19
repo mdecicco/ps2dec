@@ -1,4 +1,5 @@
 import { Decompiler } from 'decompiler';
+
 import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
@@ -93,7 +94,7 @@ export class andi extends Instruction {
     protected createExpression(): Expr.Expression | null {
         const decomp = Decompiler.current;
         const lhs = decomp.getRegister(this.operands[1] as Reg.Register);
-        const rhs = decomp.getRegister(this.operands[2] as Reg.Register);
+        const rhs = Expr.Imm.i32(this.operands[2] as number);
 
         const expr = new Expr.BitwiseAnd(lhs, rhs);
         decomp.setRegister(this.operands[0] as Reg.Register, expr);
@@ -496,10 +497,10 @@ export class jal extends Instruction {
         const call = new Expr.Call(targetAddr);
         if (!target || !target.returnLocation) return call;
 
-        if ('reg' in target.returnLocation) {
-            decomp.setRegister(target.returnLocation.reg, call);
+        if (typeof target.returnLocation === 'number') {
+            decomp.setStack(target.returnLocation, call);
         } else {
-            decomp.setStack(target.returnLocation.offset, call);
+            decomp.setRegister(target.returnLocation, call);
         }
 
         return null;

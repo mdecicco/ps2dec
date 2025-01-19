@@ -1,3 +1,21 @@
+import { DataSource, Repository } from 'typeorm';
+import {
+    ArrayType,
+    BitfieldType,
+    DataType,
+    EnumType,
+    FunctionSignatureType,
+    Method,
+    MethodSignatureType,
+    PointerType,
+    PrimitiveType,
+    StructureType,
+    TypeInheritance,
+    TypeSystem,
+    VTable,
+    VTableMethod
+} from 'typesys';
+
 import {
     ArrayTypeEntity,
     BitfieldFieldEntity,
@@ -18,23 +36,6 @@ import {
 } from 'apps/backend/entities';
 import Messager from 'apps/backend/message';
 import { FunctionService } from 'apps/backend/services/FunctionService';
-import {
-    ArrayType,
-    BitfieldType,
-    DataType,
-    EnumType,
-    FunctionSignatureType,
-    Method,
-    MethodSignatureType,
-    PointerType,
-    PrimitiveType,
-    StructureType,
-    TypeInheritance,
-    TypeSystem,
-    VTable,
-    VTableMethod
-} from 'decompiler';
-import { DataSource, Repository } from 'typeorm';
 
 type DataTypeModelKeys = {
     PrimitiveTypeEntity: PrimitiveTypeEntity;

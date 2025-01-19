@@ -1,7 +1,10 @@
+import { i, Op, Reg } from 'decoder';
+import { Location } from 'types';
+import { DataType, TypeSystem } from 'typesys';
+
 import { FunctionCallEntity, FunctionEntity } from 'apps/backend/entities';
 import { DataTypeService, FunctionService, MemoryService } from 'apps/backend/services';
-import { i, Op, Reg } from 'decoder';
-import { BasicBlock, ControlFlowGraph, DataType, Location, TypeSystem } from 'decompiler';
+import { BasicBlock, ControlFlowGraph } from 'decompiler';
 import { compareLocations, LocationMap, LocationSet } from 'utils';
 
 interface ArgumentEvidence {

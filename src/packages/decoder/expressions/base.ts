@@ -1,4 +1,6 @@
-import { CodeBuilder, DataType, Decompiler, DecompilerInstance, TypeSystem, VersionedLocation } from 'decompiler';
+import { CodeBuilder, Decompiler, DecompilerInstance } from 'decompiler';
+import { VersionedLocation } from 'types';
+import { DataType, TypeSystem } from 'typesys';
 
 export abstract class Expression {
     private m_decomp: DecompilerInstance;

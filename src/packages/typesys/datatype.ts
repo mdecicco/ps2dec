@@ -1,5 +1,6 @@
+import { Location } from 'types';
 import { EventProducer } from 'utils';
-import { ValueLocation } from '../value';
+
 import { CallConfig, CallConv, getCallConfig } from './callconv';
 import { Method } from './function';
 import { TypeSystem } from './typesys';
@@ -40,7 +41,7 @@ export interface TypeInheritance {
 }
 
 export interface ArgumentInfo {
-    location: ValueLocation;
+    location: Location;
     typeId: number;
 }
 
@@ -492,7 +493,7 @@ export class MethodSignatureType extends FunctionSignatureType {
     }
 
     get thisLocation() {
-        return this.m_callConf.thisArgumentLocation as ValueLocation;
+        return this.m_callConf.thisArgumentLocation as Location;
     }
 
     static generateName(returnType: DataType, argumentTypes: DataType[], methodOf?: DataType) {

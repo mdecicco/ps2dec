@@ -1,11 +1,11 @@
 import { Reg } from 'decoder';
-import { ValueLocation } from '../value';
+import { Location } from 'types';
 import { ArrayType, DataType, PointerType, PrimitiveType, StructureType } from './datatype';
 
 export type CallConfig = {
-    thisArgumentLocation: ValueLocation | null;
-    argumentLocations: ValueLocation[];
-    returnValueLocation: ValueLocation | null;
+    thisArgumentLocation: Location | null;
+    argumentLocations: Location[];
+    returnValueLocation: Location | null;
 };
 
 export enum CallConv {
@@ -23,12 +23,12 @@ function cdeclConfig(returnType: DataType, argumentTypes: DataType[], thisType?:
     if (returnType.size > 0) {
         if (returnType instanceof PrimitiveType) {
             if (returnType.isFloatingPoint) {
-                conf.returnValueLocation = { reg: { type: Reg.Type.COP1, id: Reg.COP1.F0 } };
+                conf.returnValueLocation = { type: Reg.Type.COP1, id: Reg.COP1.F0 };
             } else {
-                conf.returnValueLocation = { reg: { type: Reg.Type.EE, id: Reg.EE.V0 } };
+                conf.returnValueLocation = { type: Reg.Type.EE, id: Reg.EE.V0 };
             }
         } else if (returnType instanceof PointerType) {
-            conf.returnValueLocation = { reg: { type: Reg.Type.EE, id: Reg.EE.V0 } };
+            conf.returnValueLocation = { type: Reg.Type.EE, id: Reg.EE.V0 };
         } else {
             // honk honk
         }
@@ -40,7 +40,7 @@ function cdeclConfig(returnType: DataType, argumentTypes: DataType[], thisType?:
     let nextStackOffset = 0;
 
     if (thisType) {
-        conf.thisArgumentLocation = { reg: { type: Reg.Type.EE, id: nextGP++ } };
+        conf.thisArgumentLocation = { type: Reg.Type.EE, id: nextGP++ };
     }
 
     argumentTypes.forEach(arg => {
@@ -58,22 +58,19 @@ function cdeclConfig(returnType: DataType, argumentTypes: DataType[], thisType?:
         let useT = false;
         if (arg instanceof PrimitiveType && arg.isFloatingPoint) {
             if (nextFP === Reg.COP1.F20) useT = true;
-            else conf.argumentLocations.push({ reg: { type: Reg.Type.COP1, id: nextFP++ } });
+            else conf.argumentLocations.push({ type: Reg.Type.COP1, id: nextFP++ });
         } else {
             if (nextGP > Reg.EE.A3) useT = true;
-            else conf.argumentLocations.push({ reg: { type: Reg.Type.EE, id: nextGP++ } });
+            else conf.argumentLocations.push({ type: Reg.Type.EE, id: nextGP++ });
         }
 
         if (useT) {
             if (nextT === Reg.EE.T4) useStack = true;
-            else conf.argumentLocations.push({ reg: { type: Reg.Type.EE, id: nextT++ } });
+            else conf.argumentLocations.push({ type: Reg.Type.EE, id: nextT++ });
         }
 
         if (useStack) {
-            conf.argumentLocations.push({
-                base: { type: Reg.Type.EE, id: Reg.EE.SP },
-                offset: nextStackOffset
-            });
+            conf.argumentLocations.push(nextStackOffset);
 
             nextStackOffset += 8;
         }

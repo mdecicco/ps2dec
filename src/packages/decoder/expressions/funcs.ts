@@ -1,4 +1,6 @@
-import { CodeBuilder, PrimitiveType, TypeSystem } from 'decompiler';
+import { CodeBuilder } from 'decompiler';
+import { PrimitiveType, TypeSystem } from 'typesys';
+
 import { Expression } from './base';
 import { foldConstants } from './common';
 import { Imm } from './immediate';

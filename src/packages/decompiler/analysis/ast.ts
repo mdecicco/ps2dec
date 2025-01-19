@@ -1,12 +1,7 @@
 import * as nodes from '../ast/nodes';
+import { IASTAnalyzerPlugin } from '../ast/plugin';
+import { ArrayAccessAnalyzer, LoopVariableAnalyzer, SubExpressionVariableAnalyzer } from '../ast/plugins';
 import { FunctionCode } from '../input';
-import { IASTAnalyzerPlugin } from './ast_plugin';
-import {
-    ArrayAccessAnalyzer,
-    LoopVariableAnalyzer,
-    PhiVariableAnalyzer,
-    SubExpressionVariableAnalyzer
-} from './variables';
 
 export class ASTAnalyzer {
     private m_func: FunctionCode;
@@ -17,7 +12,6 @@ export class ASTAnalyzer {
         this.m_plugins.push(
             new LoopVariableAnalyzer(func),
             new ArrayAccessAnalyzer(func),
-            new PhiVariableAnalyzer(func),
             new SubExpressionVariableAnalyzer(func)
         );
     }

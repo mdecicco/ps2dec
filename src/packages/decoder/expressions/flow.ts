@@ -1,5 +1,6 @@
-import { PointerType, TypeSystem } from 'decompiler';
-import { CodeBuilder } from 'packages/decompiler/codegen';
+import { CodeBuilder } from 'decompiler';
+import { PointerType, TypeSystem } from 'typesys';
+
 import { Expression } from './base';
 import { BinaryExpression } from './binary';
 import { Imm } from './immediate';

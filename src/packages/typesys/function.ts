@@ -1,6 +1,5 @@
 import { EventListener } from 'utils';
-import { SerializedValue, Value, ValueLocation } from '../value';
-import { DataType, FunctionSignatureType, MethodSignatureType } from './datatype';
+import { FunctionSignatureType, MethodSignatureType } from './datatype';
 import { TypeSystem } from './typesys';
 import { VTableMethod } from './vtable';
 
@@ -8,8 +7,6 @@ export type FuncRehydrateData = {
     id: number;
     address: number;
     endAddress: number;
-    args: SerializedValue[];
-    retLocation: ValueLocation | null;
     signatureId: number;
     name: string;
     isConstructor: boolean;
@@ -27,8 +24,6 @@ export class Func {
     private m_id: number;
     private m_address: number;
     private m_endAddress: number;
-    private m_args: Value[];
-    private m_retLocation: ValueLocation | null;
     protected m_signatureId: number;
     private m_name: string;
     private m_isConstructor: boolean;
@@ -46,13 +41,9 @@ export class Func {
         this.m_endAddress = endAddress;
         this.m_signatureId = signature.id;
         this.m_name = `FUN_${address.toString(16).padStart(8, '0')}`;
-        this.m_args = [];
-        this.m_retLocation = signature.returnLocation;
         this.m_isConstructor = false;
         this.m_isDestructor = false;
         this.m_valueListeners = [];
-
-        this.rebuildArgInfo();
     }
 
     get id(): number {
@@ -92,11 +83,16 @@ export class Func {
     }
 
     get arguments() {
-        return this.m_args;
+        const sig = this.signature;
+        const argTypes = sig.argumentTypes;
+        return sig.arguments.map((a, idx) => ({
+            location: a.location,
+            type: argTypes[idx]
+        }));
     }
 
     get returnLocation() {
-        return this.m_retLocation || this.signature.returnLocation;
+        return this.signature.returnLocation;
     }
 
     get signature(): FunctionSignatureType | MethodSignatureType {
@@ -105,81 +101,6 @@ export class Func {
 
     set signature(sig: FunctionSignatureType | MethodSignatureType) {
         this.m_signatureId = sig.id;
-        this.rebuildArgInfo();
-    }
-
-    setArgName(index: number, name: string) {
-        if (index >= this.m_args.length) {
-            throw new Error('Argument index out of range');
-        }
-
-        this.m_args[index].name = name;
-    }
-
-    setArgType(index: number, type: DataType) {
-        if (index >= this.m_args.length) {
-            throw new Error('Argument index out of range');
-        }
-
-        const currentSig = this.signature;
-
-        const newArgTypes = Array.from(currentSig.argumentTypes);
-        newArgTypes[index] = type;
-
-        const sigName = FunctionSignatureType.generateName(currentSig.returnType, newArgTypes);
-        this.m_signatureId = TypeSystem.get().getType(sigName).id;
-        this.rebuildArgInfo();
-    }
-
-    addArg(type: DataType, name?: string) {
-        const currentSig = this.signature;
-
-        const newArgTypes = Array.from(currentSig.argumentTypes);
-        newArgTypes.push(type);
-
-        const sigName = FunctionSignatureType.generateName(currentSig.returnType, newArgTypes);
-        this.m_signatureId = TypeSystem.get().getType(sigName).id;
-        this.rebuildArgInfo();
-    }
-
-    removeArg(index: number) {
-        if (index >= this.m_args.length) {
-            throw new Error('Argument index out of range');
-        }
-
-        const currentSig = this.signature;
-
-        const newArgTypes = Array.from(currentSig.argumentTypes);
-        newArgTypes.splice(index, 1);
-
-        this.m_args.forEach((a, idx) => {
-            if (idx <= index) return;
-
-            if (a.name === `param_${idx + 1}`) a.name = `param_${idx}`;
-        });
-
-        this.m_valueListeners.splice(index, 1)[0].remove();
-        this.m_args.splice(index, 1);
-
-        const sigName = FunctionSignatureType.generateName(currentSig.returnType, newArgTypes);
-        this.m_signatureId = TypeSystem.get().getType(sigName).id;
-        this.rebuildArgInfo();
-    }
-
-    protected rebuildArgInfo() {
-        this.m_valueListeners.forEach(l => l.remove());
-        this.m_valueListeners = [];
-
-        const newArgInfo: Value[] = [];
-
-        this.signature.arguments.forEach((arg, idx) => {
-            const value = new Value(arg.typeId, idx < this.m_args.length ? this.m_args[idx].name : `param_${idx + 1}`);
-            const typeListener = value.addListener('type-changed', this.setArgType.bind(this, idx));
-            this.m_valueListeners.push(typeListener);
-            newArgInfo.push(value);
-        });
-
-        this.m_args = newArgInfo;
     }
 
     static rehydrate(data: FuncRehydrateData): Func | Method {
@@ -196,24 +117,16 @@ export class Func {
         this.m_id = data.id;
         this.m_address = data.address;
         this.m_endAddress = data.endAddress;
-        this.m_retLocation = data.retLocation;
         this.m_signatureId = data.signatureId;
         this.m_name = data.name;
         this.m_isConstructor = data.isConstructor;
         this.m_isDestructor = data.isDestructor;
         this.m_valueListeners = [];
-        this.m_args = data.args.map((arg, idx) => {
-            const value = Value.deserialize(arg);
-            const typeListener = value.addListener('type-changed', this.setArgType.bind(this, idx));
-            this.m_valueListeners.push(typeListener);
-            return value;
-        });
     }
 }
 
 export class Method extends Func {
     private m_vtbEntry: VTableMethod | null;
-    private m_thisValue: Value;
 
     constructor(
         id: number,
@@ -225,7 +138,6 @@ export class Method extends Func {
         super(id, address, endAddress, signature);
 
         this.m_vtbEntry = vtableEntry || null;
-        this.m_thisValue = new Value(signature.thisType.id, 'this');
     }
 
     get vtableEntry() {
@@ -238,11 +150,14 @@ export class Method extends Func {
 
     override set signature(sig: MethodSignatureType) {
         this.m_signatureId = sig.id;
-        this.rebuildArgInfo();
     }
 
     get thisValue() {
-        return this.m_thisValue;
+        const signature = this.signature;
+        return {
+            location: signature.thisLocation,
+            type: signature.thisType
+        };
     }
 
     static rehydrate(data: FuncRehydrateData): Func | Method {
@@ -252,7 +167,6 @@ export class Method extends Func {
 
         const fn = Object.create(Method.prototype) as Method;
         fn.setFromRehydrateData(data);
-        fn.m_thisValue = new Value(data.methodInfo.thisTypeId, 'this');
 
         if (data.methodInfo.vtableMethod) {
             const vtb = TypeSystem.get().getVtableById(data.methodInfo.vtableMethod.vtableId);

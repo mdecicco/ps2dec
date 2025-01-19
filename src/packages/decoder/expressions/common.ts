@@ -1,4 +1,4 @@
-import { DataType, PrimitiveType, TypeSystem } from 'decompiler';
+import { DataType, PrimitiveType, TypeSystem } from 'typesys';
 import { Imm } from './immediate';
 
 export function foldConstants(

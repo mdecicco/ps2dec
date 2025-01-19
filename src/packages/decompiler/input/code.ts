@@ -1,31 +1,12 @@
 import { Expr, i, Op, Reg } from 'decoder';
+import { Location, VersionedLocation } from 'types';
+import { Func, Method } from 'typesys';
 import { compareLocations, formatLocation, formatVersionedLocation, LocationMap } from 'utils';
-import { BasicBlock, ControlFlowGraph, DecompVariable } from '../analysis';
-import { Location, VersionedLocation } from '../common';
+
+import { BasicBlock, ControlFlowGraph, Value } from '../analysis';
+import { instructionReads, instructionWrites } from '../common';
 import { Decompiler } from '../decompiler';
-import { Func, Method } from '../typesys';
-
-export interface Phi {
-    location: Location;
-    versions: number[];
-    definitions: LocationDef[];
-    uses: LocationUse[];
-    variable: Expr.Variable;
-}
-
-export interface LocationDef {
-    value: Location;
-    version: number;
-    instruction: i.Instruction | null;
-    block: BasicBlock;
-}
-
-export interface LocationUse {
-    value: Location;
-    version: number;
-    instruction: i.Instruction;
-    block: BasicBlock;
-}
+import { LocationDef, LocationUse, Phi } from '../types';
 
 // Version 0 indicates undefined
 
@@ -40,9 +21,10 @@ export class FunctionCode {
     private m_defs: Map<i.Instruction | null, LocationDef[]>;
     private m_addressVersionMap: Map<number, LocationMap<number>>;
     private m_phis: Map<BasicBlock, Phi[]>;
-    private m_arguments: DecompVariable[];
-    private m_self: DecompVariable | null;
-    private m_isInitialized;
+    private m_arguments: Value[];
+    private m_self: Value | null;
+    private m_isInitialized: boolean;
+    private m_isRebuilding: boolean;
 
     constructor(functionId: number) {
         const func = Decompiler.findFunctionById(functionId);
@@ -59,6 +41,8 @@ export class FunctionCode {
         }
 
         const cfg = ControlFlowGraph.build(code);
+        cfg.postProcess(func);
+
         const entry = cfg.getEntryBlock();
         if (!entry) throw new Error(`Failed to find entry block for function ${functionId}`);
 
@@ -75,6 +59,7 @@ export class FunctionCode {
         this.m_arguments = [];
         this.m_self = null;
         this.m_isInitialized = false;
+        this.m_isRebuilding = false;
     }
 
     get function() {
@@ -105,24 +90,24 @@ export class FunctionCode {
         return this.m_isInitialized;
     }
 
+    get isRebuilding() {
+        return this.m_isRebuilding;
+    }
+
     initialize() {
         if (this.m_isInitialized) return;
 
-        this.define({ type: Reg.Type.EE, id: Reg.EE.PC }, Expr.Imm.u32(this.m_entry.startAddress));
         this.define({ type: Reg.Type.EE, id: Reg.EE.SP }, new Expr.StackPointer());
-        this.define({ type: Reg.Type.EE, id: Reg.EE.RA }, new Expr.RawString(`$ra`));
         this.define({ type: Reg.Type.EE, id: Reg.EE.ZERO }, Expr.Imm.i128(0));
         this.define({ type: Reg.Type.COP2_VI, id: Reg.COP2.Integer.VI0 }, Expr.Imm.i32(0));
 
         if (this.m_func instanceof Method) {
             const signature = this.m_func.signature;
-            const value = Decompiler.current.vars.createVariable(signature.thisType, this.m_func.thisValue.name);
+            const value = Decompiler.current.vars.createVariable(signature.thisType, 'this');
+            value.hasDeclaration = true;
             this.m_self = value;
 
-            let location: Location;
-            if ('reg' in signature.thisLocation) location = signature.thisLocation.reg;
-            else location = signature.thisLocation.offset;
-
+            const location = signature.thisLocation;
             this.define(location, new Expr.Variable(value));
             value.addSSALocation(location, 1);
         }
@@ -131,12 +116,13 @@ export class FunctionCode {
         const args = signature.arguments;
         for (let idx = 0; idx < args.length; idx++) {
             const arg = args[idx];
-            const value = Decompiler.current.vars.createVariable(arg.typeId, this.m_func.arguments[idx].name);
+
+            // todo: parameter names
+            const value = Decompiler.current.vars.createVariable(arg.typeId, `param_${idx + 1}`);
+            value.hasDeclaration = true;
             this.m_arguments.push(value);
 
-            let location: Location;
-            if ('reg' in arg.location) location = arg.location.reg;
-            else location = arg.location.offset;
+            const location = arg.location;
 
             this.define(location, new Expr.Variable(value));
             value.addSSALocation(location, 1);
@@ -385,14 +371,17 @@ export class FunctionCode {
      * Rebuild the values of all locations
      */
     rebuildValues() {
-        this.m_entry.walkForward(block => {
+        this.m_isRebuilding = true;
+
+        this.m_cfg.walkForward(block => {
             block.each(instr => {
-                const reads = this.getUses(instr);
-                const writes = this.getDefs(instr);
-                const defuse = `defs: [${writes.map(d => formatVersionedLocation(d)).join(', ')}] uses: [${reads
-                    .map(u => formatVersionedLocation(u))
-                    .join(', ')}]`;
-                console.log(`generating ${instr.toString(true)} ${defuse}`);
+                // const reads = this.getUses(instr);
+                // const writes = this.getDefs(instr);
+                // const defuse = `defs: [${writes.map(d => formatVersionedLocation(d)).join(', ')}] uses: [${reads
+                //     .map(u => formatVersionedLocation(u))
+                //     .join(', ')}]`;
+                // console.log(`generating ${instr.toString(true)} ${defuse}`);
+
                 const expr = instr.generate();
 
                 if (instr.isStore && expr instanceof Expr.Store) {
@@ -408,6 +397,8 @@ export class FunctionCode {
 
             return true;
         });
+
+        this.m_isRebuilding = false;
     }
 
     //
@@ -416,7 +407,7 @@ export class FunctionCode {
 
     private buildDefUse() {
         const blockVersionMap = new Map<BasicBlock, LocationMap<number>>();
-        this.m_entry.walkForward(block => {
+        this.m_cfg.walkForward(block => {
             let inheritedVersions: LocationMap<number> = this.m_currentVersionMap;
 
             if (block.predecessors.length > 0) {
@@ -454,7 +445,7 @@ export class FunctionCode {
 
                 this.m_addressVersionMap.set(instr.address, versions);
 
-                const reads = this.instructionReads(instr).map(r => ({
+                const reads = instructionReads(this.m_func, instr).map(r => ({
                     value: r,
                     version: inheritedVersions.get(r) || 0,
                     instruction: instr,
@@ -462,7 +453,7 @@ export class FunctionCode {
                 }));
                 this.m_uses.set(instr, reads);
 
-                const writes = this.instructionWrites(instr).map(w => ({
+                const writes = instructionWrites(this.m_func, instr).map(w => ({
                     value: w,
                     version: this.incrementVersion(w),
                     instruction: instr,
@@ -476,10 +467,10 @@ export class FunctionCode {
                     });
                 }
 
-                const defuse = `defs: [${writes.map(d => formatVersionedLocation(d)).join(', ')}] uses: [${reads
-                    .map(u => formatVersionedLocation(u))
-                    .join(', ')}]`;
-                console.log(`${instr.toString(true)} ${defuse}`);
+                // const defuse = `defs: [${writes.map(d => formatVersionedLocation(d)).join(', ')}] uses: [${reads
+                //     .map(u => formatVersionedLocation(u))
+                //     .join(', ')}]`;
+                // console.log(`${instr.toString(true)} ${defuse}`);
             });
 
             blockVersionMap.set(block, inheritedVersions);
@@ -502,7 +493,17 @@ export class FunctionCode {
                     continue;
                 }
 
-                const value = Decompiler.current.vars.createVariable('undefined');
+                let value: Value | null = null;
+
+                for (const def of defs) {
+                    const existingVar = Decompiler.current.vars.getVariable(def);
+                    if (existingVar) {
+                        value = existingVar;
+                        break;
+                    }
+                }
+
+                if (!value) value = Decompiler.current.vars.createVariable('undefined');
 
                 const phi: Phi = {
                     location: use.value,
@@ -567,6 +568,33 @@ export class FunctionCode {
     private process() {
         this.buildDefUse();
         this.identifyPhis();
+
+        this.m_cfg.walkForward(b => {
+            b.each(instr => {
+                if (!instr.isStore) return;
+
+                const reads = this.getUses(instr);
+                const writes = this.getDefs(instr, false);
+
+                for (const write of writes) {
+                    if (typeof write.value !== 'number') continue;
+                    // either spilled register or register backup
+
+                    const storedValueLoc = reads.find(r => Reg.compare(instr.reads[0], r.value as Reg.Register));
+                    if (!storedValueLoc) continue;
+                    if (storedValueLoc.version === 0) {
+                        // register backup
+                        continue;
+                    }
+
+                    console.log(
+                        `Found spilled register ${formatVersionedLocation(storedValueLoc)} @ ${instr.toString(true)}`
+                    );
+                }
+            });
+
+            return true;
+        });
     }
 
     private define(location: Location, value: Expr.Expression) {
@@ -698,96 +726,6 @@ export class FunctionCode {
         });
 
         return reachable;
-    }
-
-    private instructionReads(instr: i.Instruction): Location[] {
-        const uses: Location[] = [];
-
-        if (instr.isLoad) {
-            const mem = instr.operands[instr.operands.length - 1] as Op.MemOperand;
-            if (Reg.compare(mem.base, { type: Reg.Type.EE, id: Reg.EE.SP })) {
-                uses.push(mem.offset);
-            }
-        }
-
-        // Determine if the instruction is a call that reads argument locations
-        const callTarget = instr.callTarget;
-        if (callTarget) {
-            callTarget.signature.arguments.forEach(arg => {
-                if ('reg' in arg.location) {
-                    uses.push(arg.location.reg);
-                } else if (Reg.compare(arg.location.base, { type: Reg.Type.EE, id: Reg.EE.SP })) {
-                    uses.push(arg.location.offset);
-                }
-            });
-        }
-
-        // If this instruction returns from the function, we need to add the return location
-        if (
-            instr.isBranch &&
-            instr.code === Op.Code.jr &&
-            Reg.compare(instr.reads[0], { type: Reg.Type.EE, id: Reg.EE.RA })
-        ) {
-            const returnLoc = this.m_func.signature.returnLocation;
-            if (returnLoc) {
-                if ('reg' in returnLoc) {
-                    uses.push(returnLoc.reg);
-                } else {
-                    uses.push(returnLoc.offset);
-                }
-            }
-        }
-
-        for (const reg of instr.reads) {
-            uses.push(reg);
-        }
-
-        return uses;
-    }
-
-    private instructionWrites(instr: i.Instruction): Location[] {
-        const defs: Location[] = [];
-
-        // Determine if the instruction stores to a stack offset
-        if (instr.isStore) {
-            const mem = instr.operands[instr.operands.length - 1] as Op.MemOperand;
-            if (Reg.compare(mem.base, { type: Reg.Type.EE, id: Reg.EE.SP })) {
-                defs.push(mem.offset);
-            }
-        }
-
-        // Determine if the instruction is a call that sets the return location
-        const callTarget = instr.callTarget;
-        if (callTarget && callTarget.returnLocation) {
-            if ('reg' in callTarget.returnLocation) {
-                defs.push(callTarget.returnLocation.reg);
-            } else {
-                defs.push(callTarget.returnLocation.offset);
-            }
-        }
-
-        for (const reg of instr.writes) {
-            if (reg.type === Reg.Type.EE) {
-                if (reg.id === Reg.EE.SP) {
-                    // Don't count stack adjustments
-                    continue;
-                }
-
-                if (reg.id === Reg.EE.PC) {
-                    // Don't count the return address
-                    continue;
-                }
-
-                if (reg.id === Reg.EE.ZERO) {
-                    // Don't count the zero register
-                    continue;
-                }
-            }
-
-            defs.push(reg);
-        }
-
-        return defs;
     }
 
     private currentVersion(location: Location) {

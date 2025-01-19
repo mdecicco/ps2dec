@@ -1,4 +1,6 @@
-import { CodeBuilder, PointerType } from 'decompiler';
+import { CodeBuilder } from 'decompiler';
+import { PointerType } from 'typesys';
+
 import { Expression } from './base';
 import { BinaryExpression } from './binary';
 import { foldConstants } from './common';

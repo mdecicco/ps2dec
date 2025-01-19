@@ -28,6 +28,7 @@ export const MemoryProvider: React.FC<{ children?: React.ReactNode; withData: bo
     const project = useProject();
     const [regions, setRegions] = React.useState<MemoryRegionModel[]>([]);
     const [loadingRegions, setLoadingRegions] = React.useState(false);
+    const [didLoad, setDidLoad] = React.useState(false);
     const [loadingData, setLoadingData] = React.useState(false);
     const regionDataMap = React.useRef<Map<number, Uint8Array>>(new Map());
     const regionViewMap = React.useRef<Map<number, DataView>>(new Map());
@@ -64,20 +65,18 @@ export const MemoryProvider: React.FC<{ children?: React.ReactNode; withData: bo
     };
 
     React.useEffect(() => {
+        if (didLoad || !project.path || regions.length > 0) return;
         const loadRegions = async () => {
             setLoadingRegions(true);
             const loadedRegions = await Messager.invoke('getMemoryRegions');
             setRegions(loadedRegions);
             handleRegionsAdded(loadedRegions);
             setLoadingRegions(false);
+            setDidLoad(true);
         };
 
-        if (project.path) {
-            if (!loadingRegions) {
-                loadRegions();
-            }
-        }
-    }, [project.path, loadingRegions]);
+        loadRegions();
+    }, [project.path, loadingRegions, didLoad, regions]);
 
     const getRegionForAddress = (address: number) => {
         const region = regions.find(region => address >= region.start && address < region.end);

@@ -1,8 +1,9 @@
 import { Expr } from 'decoder';
 import { compareLocations } from 'utils';
-import * as nodes from '../../ast/nodes';
+
 import { Decompiler } from '../../decompiler';
-import { ASTAnalyzerPlugin } from '../ast_plugin';
+import * as nodes from '../nodes';
+import { ASTAnalyzerPlugin } from '../plugin';
 
 export class LoopVariableAnalyzer extends ASTAnalyzerPlugin {
     analyzeForLoop(loop: nodes.ForLoopNode): boolean {

@@ -1,7 +1,7 @@
 import { Expr } from 'decoder';
 import { Decompiler } from 'decompiler';
-import * as nodes from '../../ast/nodes';
-import { ASTAnalyzerPlugin } from '../ast_plugin';
+import * as nodes from '../nodes';
+import { ASTAnalyzerPlugin } from '../plugin';
 
 export class SubExpressionVariableAnalyzer extends ASTAnalyzerPlugin {
     analyzeRoot(root: nodes.Node): boolean {

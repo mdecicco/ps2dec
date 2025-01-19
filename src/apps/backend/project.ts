@@ -2,8 +2,9 @@ import { BrowserWindow, dialog, screen } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
+import { ViewId } from 'types';
 
-import { createDatabase } from 'apps/backend/dal/db';
+import { createDatabase } from 'apps/backend/db';
 import { WindowEntity } from 'apps/backend/entities';
 import Messager from 'apps/backend/message';
 import { MainActionService } from 'apps/backend/services/ActionService';
@@ -13,7 +14,6 @@ import { DecompilerService } from 'apps/backend/services/DecompilerService';
 import { FunctionService } from 'apps/backend/services/FunctionService';
 import { MemoryService } from 'apps/backend/services/MemoryService';
 import storage from 'apps/backend/storage';
-import { ViewId } from 'packages/types';
 
 export class ProjectManager {
     private static instance: ProjectManager | null = null;

@@ -1,4 +1,5 @@
 import { Decompiler } from 'decompiler';
+
 import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';

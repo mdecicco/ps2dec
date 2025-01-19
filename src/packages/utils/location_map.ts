@@ -1,5 +1,5 @@
 import { Reg } from 'decoder';
-import { Location } from 'decompiler';
+import { Location } from 'types';
 import { compareLocations } from 'utils';
 
 type RegisterMap<T> = {

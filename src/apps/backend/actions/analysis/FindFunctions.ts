@@ -1,7 +1,8 @@
+import { i, Op, Reg } from 'decoder';
+import { TypeSystem } from 'typesys';
+
 import { AnnotationEntity, FunctionEntity } from 'apps/backend/entities';
 import { MemoryService } from 'apps/backend/services';
-import { i, Op, Reg } from 'decoder';
-import { TypeSystem } from 'decompiler';
 import { AnnotationModel, MemoryRegionModel } from 'types';
 
 const ProgressInterval = 125;

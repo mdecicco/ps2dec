@@ -1,14 +1,7 @@
-import {
-    ArrayType,
-    CodeBuilder,
-    DataType,
-    Decompiler,
-    PointerType,
-    PrimitiveType,
-    StructureType,
-    TypeSystem,
-    VersionedLocation
-} from 'decompiler';
+import { CodeBuilder, Decompiler } from 'decompiler';
+import { VersionedLocation } from 'types';
+import { ArrayType, DataType, PointerType, PrimitiveType, StructureType, TypeSystem } from 'typesys';
+
 import { Expression } from './base';
 import { Add, BinaryExpression } from './binary';
 import { foldConstants } from './common';

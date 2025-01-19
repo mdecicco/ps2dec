@@ -1,4 +1,6 @@
 import { Decompiler } from 'decompiler';
+
+import { Func, Method } from 'typesys';
 import { Expression } from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
@@ -123,13 +125,12 @@ export abstract class Instruction {
         return this.m_isLikelyBranch;
     }
 
-    get callTarget() {
+    getCallTarget(curFunc: Func | Method) {
         if (!this.isBranch) return null;
 
         const target = this.m_operands[this.m_operands.length - 1];
         if (typeof target !== 'number') return null;
 
-        const curFunc = Decompiler.current.cache.func;
         if (target >= curFunc.address && target <= curFunc.endAddress) return null;
 
         return Decompiler.findFunctionByAddress(target);

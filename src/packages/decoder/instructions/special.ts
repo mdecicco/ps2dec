@@ -1,4 +1,5 @@
 import { Decompiler } from 'decompiler';
+
 import * as Expr from '../expressions';
 import * as Op from '../opcodes';
 import * as Reg from '../registers';
@@ -677,10 +678,11 @@ export class jr extends Instruction {
             const decomp = Decompiler.current;
             const returnLoc = decomp.cache.func.returnLocation;
             if (returnLoc) {
-                if ('reg' in returnLoc) {
-                    return new Expr.RawString(`return ${decomp.getRegister(returnLoc.reg)}`);
+                if (typeof returnLoc === 'number') {
+                    return new Expr.RawString(`return ${decomp.getStack(returnLoc)}`);
                 }
-                return new Expr.RawString(`return ${decomp.getStack(returnLoc.offset)}`);
+
+                return new Expr.RawString(`return ${decomp.getRegister(returnLoc)}`);
             }
 
             return new Expr.RawString(`return`);
@@ -764,6 +766,14 @@ export class movn extends Instruction {
             codeStr: 'movn',
             machineCode: rawCode,
             operands: [rd, rs, rt],
+            // Instruction doesn't actually read rd. This is just a workaround to make the decompiler
+            // generate the correct expression.
+            //
+            // Actual behavior is:
+            // if (rt != 0) rd = rs;
+            //
+            // But we have to represent it as
+            // rd = rt != 0 ? rs : rd
             reads: [rs, rt],
             writes: [rd]
         });
@@ -771,9 +781,9 @@ export class movn extends Instruction {
 
     protected createExpression(): Expr.Expression | null {
         const decomp = Decompiler.current;
-        const checkVar = decomp.getRegister(this.reads[1]);
-        const truthy = decomp.getRegister(this.reads[0]);
-        const falsy = decomp.getRegister(this.writes[0]);
+        const checkVar = decomp.getRegister(this.reads[0]);
+        const truthy = decomp.getRegister(this.reads[1]);
+        const falsy = decomp.getRegister(this.reads[2]);
 
         const cond = new Expr.IsNotEqual(checkVar, Expr.Imm.u32(0));
         const expr = new Expr.Ternary(cond, truthy, falsy);

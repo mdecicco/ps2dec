@@ -49,6 +49,7 @@ export const WelcomeView: React.FC = () => {
                 <View.MenuItem onClick={() => project.showView('disassembly')}>Disassembly</View.MenuItem>
                 <View.MenuItem onClick={() => project.showView('functions')}>Functions</View.MenuItem>
                 <View.MenuItem onClick={() => project.showView('decompilation')}>Decompilation</View.MenuItem>
+                <View.MenuItem onClick={() => project.showView('control-flow')}>Control Flow</View.MenuItem>
                 <View.MenuItem onClick={() => Messager.send('openDevTools')}>Open DevTools</View.MenuItem>
             </View.Menu>
             <Box

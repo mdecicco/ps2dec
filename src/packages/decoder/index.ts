@@ -398,24 +398,25 @@ const InstructionSet: Match = {
 };
 
 function simplify(inst: i.Instruction): i.Instruction {
+    const zero: Reg.Register = { type: Reg.Type.EE, id: Reg.EE.ZERO };
     if (i.beq.is(inst)) {
-        if (inst.reads[0].id !== Reg.EE.ZERO || inst.reads[1].id !== Reg.EE.ZERO) return inst;
-        return new i.b(inst.address, inst.operands[2] as number);
+        if (!Reg.compare(inst.reads[0], zero) || !Reg.compare(inst.reads[1], zero)) return inst;
+        return new i.b(inst.address, inst.operands[2] as number, inst);
     }
 
     if (i.or.is(inst)) {
-        if (inst.reads[1].id !== Reg.EE.ZERO) return inst;
-        return new i.move(inst.address, inst.writes[0], inst.reads[0]);
+        if (!Reg.compare(inst.reads[1], zero)) return inst;
+        return new i.move(inst.address, inst.writes[0], inst.reads[0], inst);
     }
 
     if (i.daddu.is(inst)) {
-        if (inst.reads[1].id !== Reg.EE.ZERO) return inst;
-        return new i.move(inst.address, inst.writes[0], inst.reads[0]);
+        if (!Reg.compare(inst.reads[1], zero)) return inst;
+        return new i.move(inst.address, inst.writes[0], inst.reads[0], inst);
     }
 
     if (i.addiu.is(inst)) {
-        if (inst.reads[0].id !== Reg.EE.ZERO) return inst;
-        return new i.li(inst.address, inst.writes[0], inst.operands[2] as number);
+        if (!Reg.compare(inst.reads[0], zero)) return inst;
+        return new i.li(inst.address, inst.writes[0], inst.operands[2] as number, inst);
     }
 
     return inst;

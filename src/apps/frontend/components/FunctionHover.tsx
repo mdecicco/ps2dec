@@ -1,7 +1,7 @@
 import { Tooltip } from '@mui/material';
 import { Op, Reg } from 'decoder';
-import { Func, Method } from 'decompiler';
 import React from 'react';
+import { Func, Method } from 'typesys';
 import { formatAddress } from 'utils';
 
 type InfoRowProps = {
@@ -31,6 +31,17 @@ type FunctionTooltipProps = {
 
 const FunctionTooltip: React.FC<FunctionTooltipProps> = props => {
     const func = props.func;
+    const returnLoc = func.returnLocation;
+
+    let returnLocStr: string | null = null;
+    if (returnLoc) {
+        if (typeof returnLoc === 'number') {
+            returnLocStr = Op.formatOperand({
+                base: { type: Reg.Type.EE, id: Reg.EE.SP },
+                offset: returnLoc
+            });
+        } else returnLocStr = Reg.formatRegister(returnLoc);
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -57,13 +68,18 @@ const FunctionTooltip: React.FC<FunctionTooltipProps> = props => {
                     {func.arguments.map((arg, idx) => {
                         const loc = func.signature.arguments[idx].location;
                         let locStr = '';
-                        if ('reg' in loc) locStr = Reg.formatRegister(loc.reg);
-                        else locStr = Op.formatOperand(loc);
+                        if (typeof loc === 'number') {
+                            locStr = Op.formatOperand({
+                                base: { type: Reg.Type.EE, id: Reg.EE.SP },
+                                offset: loc
+                            });
+                        } else locStr = Reg.formatRegister(loc);
 
+                        // todo: argument names
                         return (
                             <InfoRow key={locStr}>
                                 <span>
-                                    {arg.type.name} {arg.name}
+                                    {arg.type.name} param_{idx + 1}
                                 </span>
                                 <span>{locStr}</span>
                             </InfoRow>
@@ -82,11 +98,7 @@ const FunctionTooltip: React.FC<FunctionTooltipProps> = props => {
                     </InfoRow>
                     <InfoRow>
                         <span>Location</span>
-                        <span>
-                            {'reg' in func.returnLocation
-                                ? Reg.formatRegister(func.returnLocation.reg)
-                                : Op.formatOperand(func.returnLocation)}
-                        </span>
+                        <span>{returnLocStr}</span>
                     </InfoRow>
                 </div>
             )}
