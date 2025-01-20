@@ -255,7 +255,7 @@ export class BasicBlock {
 
             if (callback(block)) {
                 workList.push(...block.successors);
-            } else return;
+            }
         }
     }
 
@@ -276,7 +276,7 @@ export class BasicBlock {
 
             if (callback(block)) {
                 workList.push(...block.predecessors);
-            } else return;
+            }
         }
     }
 }
@@ -559,7 +559,7 @@ export class ControlFlowGraph {
 
             if (callback(block)) {
                 workList.push(...block.successors);
-            } else return;
+            }
         }
     }
 
